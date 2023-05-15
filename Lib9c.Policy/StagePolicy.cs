@@ -98,6 +98,17 @@ namespace Nekoyume.BlockChain
                 return false;
             }
 
+            var deniedTx = new[]
+            {
+                TxId.FromHex("5e0eb74cccceeeca614b432ed29829dbef9a0c35ee1e9bf9e3c81cb56817cc0e"),
+                TxId.FromHex("f81ff995061b896bb50c6dc3c23b08acec0d65285f2c3298941c04f776bfc005"),
+            }.ToImmutableHashSet();
+
+            if (deniedTx.Contains(transaction.Id))
+            {
+                return false;
+            }
+
             return _impl.Stage(blockChain, transaction);
         }
 
