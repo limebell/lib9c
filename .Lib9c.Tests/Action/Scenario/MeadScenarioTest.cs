@@ -20,7 +20,8 @@ namespace Lib9c.Tests.Action.Scenario
             Currency mead = Currencies.Mead;
             var patron = new PrivateKey().ToAddress();
             IActionContext context = new ActionContext();
-            IWorld states = new MockWorld(new MockAccount().MintAsset(context, patron, 10 * mead));
+            IWorld states = new MockWorld();
+            states = LegacyModule.MintAsset(states, context, patron, 10 * mead);
 
             var agentAddress = new PrivateKey().ToAddress();
             var requestPledge = new RequestPledge

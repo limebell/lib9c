@@ -219,7 +219,7 @@ namespace Lib9c.Tests.Action
 
             Assert.Throws<InvalidAddressException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(_initialStates),
+                PreviousState = _initialStates,
                 Signer = _agent1Address,
                 Random = new TestRandom(),
             }));
@@ -242,7 +242,7 @@ namespace Lib9c.Tests.Action
 
             Assert.Throws<FailedLoadStateException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(_initialStates),
+                PreviousState = _initialStates,
                 Signer = _agent1Address,
                 Random = new TestRandom(),
             }));
@@ -266,7 +266,7 @@ namespace Lib9c.Tests.Action
             Assert.Throws<NotEnoughClearedStageLevelException>(() =>
                 action.Execute(new ActionContext
                 {
-                    PreviousState = new MockWorld(_initialStates),
+                    PreviousState = _initialStates,
                     Signer = _agent4Address,
                     Random = new TestRandom(),
                     BlockIndex = 1,
@@ -290,7 +290,7 @@ namespace Lib9c.Tests.Action
 
             Assert.Throws<SheetRowNotFoundException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(_initialStates),
+                PreviousState = _initialStates,
                 Signer = _agent1Address,
                 Random = new TestRandom(),
             }));
@@ -313,7 +313,7 @@ namespace Lib9c.Tests.Action
 
             Assert.Throws<ThisArenaIsClosedException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(_initialStates),
+                PreviousState = _initialStates,
                 Signer = _agent1Address,
                 Random = new TestRandom(),
                 BlockIndex = 4480001,
@@ -337,7 +337,7 @@ namespace Lib9c.Tests.Action
 
             Assert.Throws<ArenaParticipantsNotFoundException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(_initialStates),
+                PreviousState = _initialStates,
                 Signer = _agent1Address,
                 Random = new TestRandom(),
                 BlockIndex = 1,

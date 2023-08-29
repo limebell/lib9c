@@ -175,11 +175,12 @@ namespace Lib9c.Tests.Action
             var mead = Currencies.Mead;
             var price = RequestPledge.DefaultRefillMead * mead;
             ActionContext context = new ActionContext();
-            IWorld world = new MockWorld(new MockAccount()
-                .SetState(
-                    agentContractAddress,
-                    List.Empty.Add(patron.Serialize()).Add(true.Serialize()))
-                .MintAsset(context, patron, price));
+            IWorld world = new MockWorld();
+            world = LegacyModule.SetState(
+                world,
+                agentContractAddress,
+                List.Empty.Add(patron.Serialize()).Add(true.Serialize()));
+            world = LegacyModule.MintAsset(world, context, patron, price);
 
             if (agentBalance > 0)
             {

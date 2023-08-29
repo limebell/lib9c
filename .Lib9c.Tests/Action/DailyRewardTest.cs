@@ -19,7 +19,6 @@ namespace Lib9c.Tests.Action
     {
         private readonly Address _agentAddress;
         private readonly Address _avatarAddress;
-        private readonly IAccount _initialAccount;
         private readonly IWorld _initialWorld;
 
         public DailyRewardTest(ITestOutputHelper outputHelper)
@@ -29,12 +28,14 @@ namespace Lib9c.Tests.Action
                 .WriteTo.TestOutput(outputHelper)
                 .CreateLogger();
 
-            _initialAccount = new MockAccount();
+            _initialWorld = new MockWorld();
             var sheets = TableSheetsImporter.ImportSheets();
             foreach (var (key, value) in sheets)
             {
-                _initialAccount = _initialAccount
-                    .SetState(Addresses.TableSheet.Derive(key), value.Serialize());
+                _initialWorld = LegacyModule.SetState(
+                    _initialWorld,
+                    Addresses.TableSheet.Derive(key),
+                    value.Serialize());
             }
 
             var tableSheets = new TableSheets(sheets);
@@ -56,11 +57,12 @@ namespace Lib9c.Tests.Action
             };
             agentState.avatarAddresses[0] = _avatarAddress;
 
-            _initialAccount = _initialAccount
-                .SetState(Addresses.GameConfig, gameConfigState.Serialize())
-                .SetState(_agentAddress, agentState.Serialize())
-                .SetState(_avatarAddress, avatarState.Serialize());
-            _initialWorld = new MockWorld(_initialAccount);
+            _initialWorld = LegacyModule.SetState(
+                _initialWorld,
+                Addresses.GameConfig,
+                gameConfigState.Serialize());
+            _initialWorld = AgentModule.SetAgentState(_initialWorld, _agentAddress, agentState);
+            _initialWorld = AvatarModule.SetAvatarState(_initialWorld, _avatarAddress, avatarState);
         }
 
         [Fact]
@@ -89,20 +91,19 @@ namespace Lib9c.Tests.Action
         [InlineData(false)]
         public void Execute(bool legacy)
         {
-            IAccount previousStates = null;
+            IWorld previousStates = null;
             switch (legacy)
             {
                 case true:
-                    previousStates = _initialAccount;
+                    previousStates = _initialWorld;
                     break;
                 case false:
                     var avatarState = AvatarModule.GetAvatarState(_initialWorld, _avatarAddress);
-                    previousStates = SetAvatarStateAsV2To(_initialAccount, avatarState);
+                    previousStates = SetAvatarStateAsV2To(_initialWorld, avatarState);
                     break;
             }
 
-            var nextState = ExecuteInternal(previousStates, 1800);
-            var nextWorld = _initialWorld.SetAccount(nextState);
+            var nextWorld = ExecuteInternal(previousStates, 1800);
             var nextGameConfigState = LegacyModule.GetGameConfigState(nextWorld);
             AvatarModule.TryGetAvatarStateV2(nextWorld, _agentAddress, _avatarAddress, out var nextAvatarState, out var migrationRequired);
             Assert.Equal(legacy, migrationRequired);
@@ -112,14 +113,17 @@ namespace Lib9c.Tests.Action
             Assert.NotNull(nextAvatarState.worldInformation);
             Assert.Equal(nextGameConfigState.ActionPointMax, nextAvatarState.actionPoint);
 
-            var avatarRuneAmount = nextState.GetBalance(_avatarAddress, RuneHelper.DailyRewardRune);
+            var avatarRuneAmount = LegacyModule.GetBalance(
+                nextWorld,
+                _avatarAddress,
+                RuneHelper.DailyRewardRune);
             var expectedRune = RuneHelper.DailyRewardRune * nextGameConfigState.DailyRuneRewardAmount;
             Assert.Equal(expectedRune, avatarRuneAmount);
         }
 
         [Fact]
         public void Execute_Throw_FailedLoadStateException() =>
-            Assert.Throws<FailedLoadStateException>(() => ExecuteInternal(new MockAccount()));
+            Assert.Throws<FailedLoadStateException>(() => ExecuteInternal(new MockWorld()));
 
         [Theory]
         [InlineData(0, 0, true)]
@@ -133,9 +137,9 @@ namespace Lib9c.Tests.Action
             long executeBlockIndex,
             bool throwsException)
         {
-            var avatarState = AvatarModule.GetAvatarState(new MockWorld(_initialAccount), _avatarAddress);
+            var avatarState = AvatarModule.GetAvatarState(_initialWorld, _avatarAddress);
             avatarState.dailyRewardReceivedIndex = dailyRewardReceivedIndex;
-            var previousStates = SetAvatarStateAsV2To(_initialAccount, avatarState);
+            var previousStates = SetAvatarStateAsV2To(_initialWorld, avatarState);
             try
             {
                 ExecuteInternal(previousStates, executeBlockIndex);
@@ -164,35 +168,52 @@ rune_skill_slot_unlock_cost,500";
             var gameConfigState = new GameConfigState();
             gameConfigState.Set(gameConfigSheet);
 
-            var state = _initialAccount
-                .SetState(Addresses.GameConfig, gameConfigState.Serialize());
+            var state = LegacyModule.SetState(
+                _initialWorld,
+                Addresses.GameConfig,
+                gameConfigState.Serialize());
             var nextState = ExecuteInternal(state, 1800);
-            var avatarRuneAmount = nextState.GetBalance(_avatarAddress, RuneHelper.DailyRewardRune);
+            var avatarRuneAmount = LegacyModule.GetBalance(
+                nextState,
+                _avatarAddress,
+                RuneHelper.DailyRewardRune);
             Assert.Equal(0, (int)avatarRuneAmount.MajorUnit);
         }
 
-        private IAccount SetAvatarStateAsV2To(IAccount state, AvatarState avatarState) =>
-            state
-                .SetState(_avatarAddress.Derive(LegacyInventoryKey), avatarState.inventory.Serialize())
-                .SetState(_avatarAddress.Derive(LegacyWorldInformationKey), avatarState.worldInformation.Serialize())
-                .SetState(_avatarAddress.Derive(LegacyQuestListKey), avatarState.questList.Serialize())
-                .SetState(_avatarAddress, avatarState.SerializeV2());
+        private IWorld SetAvatarStateAsV2To(IWorld state, AvatarState avatarState)
+        {
+            var ret = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyInventoryKey),
+                avatarState.inventory.Serialize());
+            ret = LegacyModule.SetState(
+                ret,
+                _avatarAddress.Derive(LegacyWorldInformationKey),
+                avatarState.worldInformation.Serialize());
+            ret = LegacyModule.SetState(
+                ret,
+                _avatarAddress.Derive(LegacyQuestListKey),
+                avatarState.questList.Serialize());
+            ret = AvatarModule.SetAvatarState(ret, _avatarAddress, avatarState);
+            return ret;
+        }
 
-        private IAccount ExecuteInternal(IAccount previousStates, long blockIndex = 0)
+        private IWorld ExecuteInternal(IWorld previousStates, long blockIndex = 0)
         {
             var dailyRewardAction = new DailyReward
             {
                 avatarAddress = _avatarAddress,
             };
 
-            return dailyRewardAction.Execute(new ActionContext
-            {
-                BlockIndex = blockIndex,
-                PreviousState = new MockWorld(previousStates),
-                Random = new TestRandom(),
-                Rehearsal = false,
-                Signer = _agentAddress,
-            }).GetAccount(ReservedAddresses.LegacyAccount);
+            return dailyRewardAction.Execute(
+                new ActionContext
+                {
+                    BlockIndex = blockIndex,
+                    PreviousState = previousStates,
+                    Random = new TestRandom(),
+                    Rehearsal = false,
+                    Signer = _agentAddress,
+                });
         }
     }
 }

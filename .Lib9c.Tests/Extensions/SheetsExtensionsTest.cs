@@ -9,7 +9,6 @@ namespace Lib9c.Tests.Extensions
     using Libplanet.Action.State;
     using Libplanet.Crypto;
     using Nekoyume;
-    using Nekoyume.Action;
     using Nekoyume.Action.Extensions;
     using Nekoyume.Extensions;
     using Nekoyume.Model.State;
@@ -19,7 +18,6 @@ namespace Lib9c.Tests.Extensions
 
     public class SheetsExtensionsTest
     {
-        private IAccount _account;
         private IWorld _world;
         private Dictionary<string, string> _sheetNameAndFiles;
         private Dictionary<Address, IValue> _sheetsAddressAndValues;
@@ -28,8 +26,7 @@ namespace Lib9c.Tests.Extensions
 
         public SheetsExtensionsTest()
         {
-            _account = new MockAccount();
-            _world = new MockWorld(_account);
+            _world = new MockWorld();
             InitSheets(
                 _world,
                 out _sheetNameAndFiles,

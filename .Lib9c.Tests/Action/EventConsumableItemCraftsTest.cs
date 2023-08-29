@@ -18,7 +18,7 @@ namespace Lib9c.Tests.Action
 
     public class EventConsumableItemCraftsTest
     {
-        private readonly IAccount _initialStates;
+        private readonly IWorld _initialStates;
         private readonly TableSheets _tableSheets;
 
         private readonly Address _agentAddress;
@@ -26,12 +26,14 @@ namespace Lib9c.Tests.Action
 
         public EventConsumableItemCraftsTest()
         {
-            _initialStates = new MockAccount();
+            _initialStates = new MockWorld();
             var sheets = TableSheetsImporter.ImportSheets();
             foreach (var (key, value) in sheets)
             {
-                _initialStates = _initialStates
-                    .SetState(Addresses.TableSheet.Derive(key), value.Serialize());
+                _initialStates = LegacyModule.SetState(
+                    _initialStates,
+                    Addresses.TableSheet.Derive(key),
+                    value.Serialize());
             }
 
             _tableSheets = new TableSheets(sheets);
@@ -58,19 +60,34 @@ namespace Lib9c.Tests.Action
                 level = 100,
             };
 
-            _initialStates = _initialStates
-                .SetState(_agentAddress, agentState.Serialize())
-                .SetState(_avatarAddress, avatarState.SerializeV2())
-                .SetState(inventoryAddr, avatarState.inventory.Serialize())
-                .SetState(worldInformationAddr, avatarState.worldInformation.Serialize())
-                .SetState(questListAddr, avatarState.questList.Serialize())
-                .SetState(gameConfigState.address, gameConfigState.Serialize());
+            _initialStates = AgentModule.SetAgentState(_initialStates, _agentAddress, agentState);
+            _initialStates = AvatarModule.SetAvatarStateV2(
+                _initialStates,
+                _avatarAddress,
+                avatarState);
+            _initialStates = LegacyModule.SetState(
+                _initialStates,
+                inventoryAddr,
+                avatarState.inventory.Serialize());
+            _initialStates = LegacyModule.SetState(
+                _initialStates,
+                worldInformationAddr,
+                avatarState.worldInformation.Serialize());
+            _initialStates = LegacyModule.SetState(
+                _initialStates,
+                questListAddr,
+                avatarState.questList.Serialize());
+            _initialStates = LegacyModule.SetState(
+                _initialStates,
+                gameConfigState.address,
+                gameConfigState.Serialize());
 
             for (var i = 0; i < GameConfig.SlotCount; i++)
             {
                 var addr = CombinationSlotState.DeriveAddress(_avatarAddress, i);
                 const int unlock = GameConfig.RequireClearedStageLevel.CombinationEquipmentAction;
-                _initialStates = _initialStates.SetState(
+                _initialStates = LegacyModule.SetState(
+                    _initialStates,
                     addr,
                     new CombinationSlotState(addr, unlock).Serialize());
             }

@@ -32,6 +32,6 @@ namespace Lib9c.Tests.Action
 
         public IAccount GetAccount(Address address) => _accounts.TryGetValue(address, out IAccount? account)
             ? account
-            : new MockAccount();
+            : new MockAccount(address);
     }
 }

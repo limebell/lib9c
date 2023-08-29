@@ -21,7 +21,7 @@ namespace Lib9c.Tests.Action.Coupons
         public void Execute()
         {
             IWorld state = new MockWorld(
-                new MockAccount()
+                new MockAccount(ReservedAddresses.LegacyAccount)
                     .SetState(
                         AdminState.Address,
                         new AdminState(CouponsFixture.AgentAddress1, 1)

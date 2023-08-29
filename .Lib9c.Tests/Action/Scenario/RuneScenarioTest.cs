@@ -42,22 +42,29 @@ namespace Lib9c.Tests.Action.Scenario
             );
 
             var context = new ActionContext();
-            IWorld initialState = new MockWorld(new Tests.Action.MockAccount()
-                .SetState(agentAddress, agentState.Serialize())
-                .SetState(avatarAddress, avatarState.SerializeV2())
-                .SetState(
-                    avatarAddress.Derive(LegacyInventoryKey),
-                    avatarState.inventory.Serialize())
-                .SetState(
-                    avatarAddress.Derive(LegacyWorldInformationKey),
-                    avatarState.worldInformation.Serialize())
-                .SetState(
-                    avatarAddress.Derive(LegacyQuestListKey),
-                    avatarState.questList.Serialize())
-                .SetState(
-                    Addresses.GoldCurrency,
-                    new GoldCurrencyState(Currency.Legacy("NCG", 2, minters: null)).Serialize())
-                .SetState(gameConfigState.address, gameConfigState.Serialize()));
+            IWorld initialState = new MockWorld();
+            initialState = AgentModule.SetAgentState(initialState, agentAddress, agentState);
+            initialState = AvatarModule.SetAvatarStateV2(initialState, avatarAddress, avatarState);
+            initialState = LegacyModule.SetState(
+                initialState,
+                avatarAddress.Derive(LegacyInventoryKey),
+                avatarState.inventory.Serialize());
+            initialState = LegacyModule.SetState(
+                initialState,
+                avatarAddress.Derive(LegacyWorldInformationKey),
+                avatarState.worldInformation.Serialize());
+            initialState = LegacyModule.SetState(
+                initialState,
+                avatarAddress.Derive(LegacyQuestListKey),
+                avatarState.questList.Serialize());
+            initialState = LegacyModule.SetState(
+                initialState,
+                Addresses.GoldCurrency,
+                new GoldCurrencyState(Currency.Legacy("NCG", 2, minters: null)).Serialize());
+            initialState = LegacyModule.SetState(
+                initialState,
+                gameConfigState.address,
+                gameConfigState.Serialize());
             foreach (var (key, value) in sheets)
             {
                 initialState = LegacyModule.SetState(

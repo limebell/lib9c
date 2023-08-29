@@ -15,6 +15,7 @@ namespace Lib9c.Tests.Action
     using Nekoyume.Model.Item;
     using Nekoyume.Model.Market;
     using Nekoyume.Model.State;
+    using Nekoyume.Module;
     using Xunit;
 
     public class ActionEvaluationTest
@@ -33,11 +34,10 @@ namespace Lib9c.Tests.Action
 #pragma warning restore CS0618
             _signer = new PrivateKey().ToAddress();
             _sender = new PrivateKey().ToAddress();
-            var account = new MockAccount()
-                .SetState(_signer, (Text)"ANYTHING")
-                .SetState(default, Dictionary.Empty.Add("key", "value"))
-                .MintAsset(context, _signer, _currency * 10000);
-            _states = new MockWorld(account);
+            _states = new MockWorld();
+            _states = LegacyModule.SetState(_states, _signer, (Text)"ANYTHING");
+            _states = LegacyModule.SetState(_states, default, Dictionary.Empty.Add("key", "value"));
+            _states = LegacyModule.MintAsset(_states, context, _signer, _currency * 10000);
             var resolver = MessagePack.Resolvers.CompositeResolver.Create(
                 NineChroniclesResolver.Instance,
                 StandardResolver.Instance

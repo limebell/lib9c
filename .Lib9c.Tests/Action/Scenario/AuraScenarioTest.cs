@@ -52,30 +52,39 @@ namespace Lib9c.Tests.Action.Scenario
             aura.Skills.Add(skill);
             avatarState.inventory.AddItem(aura);
 
-            IAccount initialState = new MockAccount()
-                .SetState(agentAddress, agentState.Serialize())
-                .SetState(avatarAddress, avatarState.SerializeV2())
-                .SetState(
-                    avatarAddress.Derive(LegacyInventoryKey),
-                    avatarState.inventory.Serialize())
-                .SetState(
-                    avatarAddress.Derive(LegacyWorldInformationKey),
-                    avatarState.worldInformation.Serialize())
-                .SetState(
-                    avatarAddress.Derive(LegacyQuestListKey),
-                    avatarState.questList.Serialize())
-                .SetState(
-                    Addresses.GoldCurrency,
-                    new GoldCurrencyState(Currency.Legacy("NCG", 2, minters: null)).Serialize())
-                .SetState(gameConfigState.address, gameConfigState.Serialize());
+            IWorld initialState = new MockWorld();
+            initialState = AgentModule.SetAgentState(initialState, agentAddress, agentState);
+            initialState = AvatarModule.SetAvatarStateV2(initialState, avatarAddress, avatarState);
+            initialState = LegacyModule.SetState(
+                initialState,
+                avatarAddress.Derive(LegacyInventoryKey),
+                avatarState.inventory.Serialize());
+            initialState = LegacyModule.SetState(
+                initialState,
+                avatarAddress.Derive(LegacyWorldInformationKey),
+                avatarState.worldInformation.Serialize());
+            initialState = LegacyModule.SetState(
+                initialState,
+                avatarAddress.Derive(LegacyQuestListKey),
+                avatarState.questList.Serialize());
+            initialState = LegacyModule.SetState(
+                initialState,
+                Addresses.GoldCurrency,
+                new GoldCurrencyState(Currency.Legacy("NCG", 2, minters: null)).Serialize());
+            initialState = LegacyModule.SetState(
+                initialState,
+                gameConfigState.address,
+                gameConfigState.Serialize());
             foreach (var (key, value) in sheets)
             {
-                initialState = initialState
-                    .SetState(Addresses.TableSheet.Derive(key), value.Serialize());
+                initialState = LegacyModule.SetState(
+                    initialState,
+                    Addresses.TableSheet.Derive(key),
+                    value.Serialize());
             }
 
             var itemSlotStateAddress = ItemSlotState.DeriveAddress(avatarAddress, BattleType.Adventure);
-            Assert.Null(initialState.GetState(itemSlotStateAddress));
+            Assert.Null(LegacyModule.GetState(initialState, itemSlotStateAddress));
 
             var has = new HackAndSlash
             {

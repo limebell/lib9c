@@ -27,8 +27,8 @@ namespace Lib9c.Tests.Action
     {
         private readonly IAccountState _baseState;
 
-        public MockAccount()
-            : this(MockAccountState.Empty)
+        public MockAccount(Address address)
+            : this(new MockAccountState(address))
         {
         }
 
@@ -47,9 +47,14 @@ namespace Lib9c.Tests.Action
         /// <inheritdoc/>
         public IAccountDelta Delta { get; private set; }
 
-        public BlockHash? BlockHash => _baseState.BlockHash;
+        /// <inheritdoc/>
+        public Address Address => _baseState.Address;
 
+        /// <inheritdoc/>
         public HashDigest<SHA256>? StateRootHash => _baseState.StateRootHash;
+
+        /// <inheritdoc/>
+        public BlockHash? BlockHash => _baseState.BlockHash;
 
         /// <inheritdoc/>
         public IImmutableSet<(Address, Currency)> TotalUpdatedFungibleAssets =>
@@ -57,8 +62,6 @@ namespace Lib9c.Tests.Action
 
         public IImmutableDictionary<(Address, Currency), BigInteger> TotalUpdatedFungibles
             { get; private set; }
-
-        public Address Address => ReservedAddresses.LegacyAccount;
 
         /// <inheritdoc/>
         [Pure]

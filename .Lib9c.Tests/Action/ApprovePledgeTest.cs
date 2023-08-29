@@ -8,6 +8,7 @@ namespace Lib9c.Tests.Action
     using Nekoyume.Action.Extensions;
     using Nekoyume.Model.Exceptions;
     using Nekoyume.Model.State;
+    using Nekoyume.Module;
     using Xunit;
 
     public class ApprovePledgeTest
@@ -20,11 +21,12 @@ namespace Lib9c.Tests.Action
             var address = new PrivateKey().ToAddress();
             var patron = new PrivateKey().ToAddress();
             var contractAddress = address.Derive(nameof(RequestPledge));
-            IAccount states = new MockAccount()
-                .SetState(
-                    contractAddress,
-                    List.Empty.Add(patron.Serialize()).Add(false.Serialize()).Add(mead.Serialize())
-                );
+            IWorld states = new MockWorld();
+            states = LegacyModule.SetState(
+                states,
+                contractAddress,
+                List.Empty.Add(patron.Serialize()).Add(false.Serialize()).Add(mead.Serialize())
+            );
 
             var action = new ApprovePledge
             {
@@ -33,7 +35,7 @@ namespace Lib9c.Tests.Action
             var nextState = action.Execute(new ActionContext
             {
                 Signer = address,
-                PreviousState = new MockWorld(states),
+                PreviousState = states,
             }).GetAccount(ReservedAddresses.LegacyAccount);
 
             var contract = Assert.IsType<List>(nextState.GetState(contractAddress));
@@ -62,7 +64,8 @@ namespace Lib9c.Tests.Action
                 contract = List.Empty.Add(patron.Serialize()).Add(true.Serialize());
             }
 
-            IAccount states = new MockAccount().SetState(contractAddress, contract);
+            IWorld states = new MockWorld();
+            states = LegacyModule.SetState(states, contractAddress, contract);
 
             var action = new ApprovePledge
             {
@@ -71,7 +74,7 @@ namespace Lib9c.Tests.Action
             Assert.Throws(exc, () => action.Execute(new ActionContext
             {
                 Signer = address,
-                PreviousState = new MockWorld(states),
+                PreviousState = states,
             }));
         }
     }

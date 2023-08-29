@@ -24,28 +24,31 @@ namespace Lib9c.DevExtensions.Tests.Action
 {
     public class CreateOrReplaceAvatarTest
     {
-        private readonly IAccount _initialStates;
+        private readonly IWorld _initialStates;
 
         public CreateOrReplaceAvatarTest()
         {
-            _initialStates = new Lib9c.Tests.Action.MockAccount();
+            _initialStates = new Lib9c.Tests.Action.MockWorld();
 
 #pragma warning disable CS0618
             var ncgCurrency = Currency.Legacy("NCG", 2, null);
 #pragma warning restore CS0618
-            _initialStates = _initialStates.SetState(
+            _initialStates = LegacyModule.SetState(
+                _initialStates,
                 GoldCurrencyState.Address,
                 new GoldCurrencyState(ncgCurrency).Serialize());
             var sheets = TableSheetsImporter.ImportSheets();
             foreach (var (key, value) in sheets)
             {
-                _initialStates = _initialStates.SetState(
+                _initialStates = LegacyModule.SetState(
+                    _initialStates,
                     Addresses.TableSheet.Derive(key),
                     value.Serialize());
             }
 
             var gameConfigState = new GameConfigState(sheets[nameof(GameConfigSheet)]);
-            _initialStates = _initialStates.SetState(
+            _initialStates = LegacyModule.SetState(
+                _initialStates,
                 gameConfigState.address,
                 gameConfigState.Serialize());
         }

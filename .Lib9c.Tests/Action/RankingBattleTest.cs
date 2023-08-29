@@ -25,12 +25,11 @@ namespace Lib9c.Tests.Action
         private readonly Address _avatar1Address;
         private readonly Address _avatar2Address;
         private readonly Address _weeklyArenaAddress;
-        private readonly IAccount _initialAccount;
         private readonly IWorld _initialWorld;
 
         public RankingBattleTest(ITestOutputHelper outputHelper)
         {
-            _initialAccount = new MockAccount();
+            _initialWorld = new MockWorld();
 
             var keys = new List<string>
             {
@@ -43,7 +42,8 @@ namespace Lib9c.Tests.Action
             {
                 if (!keys.Contains(key))
                 {
-                    _initialAccount = _initialAccount.SetState(
+                    _initialWorld = LegacyModule.SetState(
+                        _initialWorld,
                         Addresses.TableSheet.Derive(key),
                         value.Serialize());
                 }
@@ -88,20 +88,38 @@ namespace Lib9c.Tests.Action
                 true);
             _weeklyArenaAddress = weeklyArenaState.address;
 
-            _initialAccount = _initialAccount
-                .SetState(_agent1Address, agent1State.Serialize())
-                .SetState(_avatar1Address, avatar1State.Serialize())
-                .SetState(agent2Address, agent2State.Serialize())
-                .SetState(_avatar2Address, avatar2State.Serialize())
-                .SetState(Addresses.GameConfig, new GameConfigState(sheets[nameof(GameConfigSheet)]).Serialize())
-                .SetState(_weeklyArenaAddress, weeklyArenaState.Serialize())
-                .SetState(
-                    weeklyAddressListAddress,
-                    weeklyAddressList.Aggregate(List.Empty, (list, address) => list.Add(address.Serialize())))
-                .SetState(arenaInfo1Address, arenaInfo1.Serialize())
-                .SetState(arenaInfo2Address, arenaInfo2.Serialize());
-
-            _initialWorld = new MockWorld(_initialAccount);
+            _initialWorld = AgentModule.SetAgentState(_initialWorld, _agent1Address, agent1State);
+            _initialWorld = AvatarModule.SetAvatarState(
+                _initialWorld,
+                _avatar1Address,
+                avatar1State);
+            _initialWorld = AgentModule.SetAgentState(_initialWorld, agent2Address, agent2State);
+            _initialWorld = AvatarModule.SetAvatarStateV2(
+                _initialWorld,
+                _avatar2Address,
+                avatar2State);
+            _initialWorld = LegacyModule.SetState(
+                _initialWorld,
+                Addresses.GameConfig,
+                new GameConfigState(sheets[nameof(GameConfigSheet)]).Serialize());
+            _initialWorld = LegacyModule.SetState(
+                _initialWorld,
+                _weeklyArenaAddress,
+                weeklyArenaState.Serialize());
+            _initialWorld = LegacyModule.SetState(
+                _initialWorld,
+                weeklyAddressListAddress,
+                weeklyAddressList.Aggregate(
+                    List.Empty,
+                    (list, address) => list.Add(address.Serialize())));
+            _initialWorld = LegacyModule.SetState(
+                _initialWorld,
+                arenaInfo1Address,
+                arenaInfo1.Serialize());
+            _initialWorld = LegacyModule.SetState(
+                _initialWorld,
+                arenaInfo2Address,
+                arenaInfo2.Serialize());
 
             Log.Logger = new LoggerConfiguration()
                 .MinimumLevel.Verbose()
@@ -142,7 +160,8 @@ namespace Lib9c.Tests.Action
         public void ExecuteActionObsoletedException()
         {
             var previousArenaInfoAddress = _weeklyArenaAddress.Derive(_avatar1Address.ToByteArray());
-            var previousArenaInfo = new ArenaInfo((Dictionary)_initialAccount.GetState(previousArenaInfoAddress));
+            var previousArenaInfo = new ArenaInfo(
+                (Dictionary)LegacyModule.GetState(_initialWorld, previousArenaInfoAddress));
             var previousAvatarState = AvatarModule.GetAvatarState(_initialWorld, _avatar1Address);
             while (true)
             {
@@ -153,7 +172,8 @@ namespace Lib9c.Tests.Action
                 }
             }
 
-            var previousState = _initialAccount.SetState(
+            var previousState = LegacyModule.SetState(
+                _initialWorld,
                 previousArenaInfoAddress,
                 previousArenaInfo.Serialize());
 
@@ -170,7 +190,7 @@ namespace Lib9c.Tests.Action
             {
                 action.Execute(new ActionContext
                 {
-                    PreviousState = new MockWorld(previousState),
+                    PreviousState = previousState,
                     Signer = _agent1Address,
                     Random = new TestRandom(),
                     Rehearsal = false,

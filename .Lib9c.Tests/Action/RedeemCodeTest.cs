@@ -73,28 +73,55 @@ namespace Lib9c.Tests.Action
 #pragma warning restore CS0618
 
             var context = new ActionContext();
-            var initialState = new MockAccount()
-                .SetState(_agentAddress, agentState.Serialize())
-                .SetState(RedeemCodeState.Address, prevRedeemCodesState.Serialize())
-                .SetState(GoldCurrencyState.Address, goldState.Serialize())
-                .MintAsset(context, GoldCurrencyState.Address, goldState.Currency * 100000000);
+            var initialState = AgentModule.SetAgentState(
+                new MockWorld(),
+                _agentAddress,
+                agentState);
+            initialState = LegacyModule.SetState(
+                initialState,
+                RedeemCodeState.Address,
+                prevRedeemCodesState.Serialize());
+            initialState = LegacyModule.SetState(
+                initialState,
+                GoldCurrencyState.Address,
+                goldState.Serialize());
+            initialState = LegacyModule.MintAsset(
+                initialState,
+                context,
+                GoldCurrencyState.Address,
+                goldState.Currency * 100000000);
 
             if (backward)
             {
-                initialState = initialState.SetState(_avatarAddress, avatarState.Serialize());
+                initialState = AvatarModule.SetAvatarState(
+                    initialState,
+                    _avatarAddress,
+                    avatarState);
             }
             else
             {
-                initialState = initialState
-                    .SetState(_avatarAddress.Derive(LegacyInventoryKey), avatarState.inventory.Serialize())
-                    .SetState(_avatarAddress.Derive(LegacyWorldInformationKey), avatarState.worldInformation.Serialize())
-                    .SetState(_avatarAddress.Derive(LegacyQuestListKey), avatarState.questList.Serialize())
-                    .SetState(_avatarAddress, avatarState.SerializeV2());
+                initialState = LegacyModule.SetState(
+                    initialState,
+                    _avatarAddress.Derive(LegacyInventoryKey),
+                    avatarState.inventory.Serialize());
+                initialState = LegacyModule.SetState(
+                    initialState,
+                    _avatarAddress.Derive(LegacyWorldInformationKey),
+                    avatarState.worldInformation.Serialize());
+                initialState = LegacyModule.SetState(
+                    initialState,
+                    _avatarAddress.Derive(LegacyQuestListKey),
+                    avatarState.questList.Serialize());
+                initialState = AvatarModule.SetAvatarStateV2(
+                    initialState,
+                    _avatarAddress,
+                    avatarState);
             }
 
             foreach (var (key, value) in _sheets)
             {
-                initialState = initialState.SetState(
+                initialState = LegacyModule.SetState(
+                    initialState,
                     Addresses.TableSheet.Derive(key),
                     value.Serialize()
                 );
@@ -109,7 +136,7 @@ namespace Lib9c.Tests.Action
             {
                 BlockIndex = 1,
                 Miner = default,
-                PreviousState = new MockWorld(initialState),
+                PreviousState = initialState,
                 Rehearsal = false,
                 Signer = _agentAddress,
                 Random = new TestRandom(),

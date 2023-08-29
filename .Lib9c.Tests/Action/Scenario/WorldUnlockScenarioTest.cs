@@ -49,11 +49,17 @@ namespace Lib9c.Tests.Action.Scenario
 
             _weeklyArenaState = new WeeklyArenaState(0);
 
-            _initialState = new MockWorld(new Lib9c.Tests.Action.MockAccount()
-                .SetState(_weeklyArenaState.address, _weeklyArenaState.Serialize())
-                .SetState(_agentAddress, agentState.Serialize())
-                .SetState(_avatarAddress, avatarState.Serialize())
-                .SetState(_rankingMapAddress, new RankingMapState(_rankingMapAddress).Serialize()));
+            _initialState = new MockWorld();
+            _initialState = LegacyModule.SetState(
+                _initialState,
+                _weeklyArenaState.address,
+                _weeklyArenaState.Serialize());
+            _initialState = AgentModule.SetAgentState(_initialState, _agentAddress, agentState);
+            _initialState = AvatarModule.SetAvatarState(_initialState, _avatarAddress, avatarState);
+            _initialState = LegacyModule.SetState(
+                _initialState,
+                _rankingMapAddress,
+                new RankingMapState(_rankingMapAddress).Serialize());
 
             foreach (var (key, value) in sheets)
             {

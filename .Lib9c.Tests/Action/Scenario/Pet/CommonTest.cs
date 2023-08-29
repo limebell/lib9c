@@ -136,7 +136,7 @@ namespace Lib9c.Tests.Action.Scenario.Pet
             Assert.Throws<PetIsLockedException>(() => action2.Execute(
                 new ActionContext
                 {
-                    PreviousState = new MockWorld(stateV2),
+                    PreviousState = stateV2,
                     Signer = _agentAddr,
                     BlockIndex = 1L,
                     Random = random,

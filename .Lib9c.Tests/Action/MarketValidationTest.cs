@@ -12,6 +12,7 @@ namespace Lib9c.Tests.Action
     using Nekoyume.Model.Exceptions;
     using Nekoyume.Model.Market;
     using Nekoyume.Model.State;
+    using Nekoyume.Module;
     using Xunit;
 
     public class MarketValidationTest
@@ -20,12 +21,14 @@ namespace Lib9c.Tests.Action
         private static readonly Address AvatarAddress = new Address("47d082a115c63e7b58b1532d20e631538eafadde");
         private static readonly Currency Gold = Currency.Legacy("NCG", 2, minters: null);
 
-        private readonly IAccount _initialState;
+        private readonly IWorld _initialState;
 
         public MarketValidationTest()
         {
-            _initialState = new MockAccount()
-                .SetState(GoldCurrencyState.Address, new GoldCurrencyState(Gold).Serialize());
+            _initialState = LegacyModule.SetState(
+                new MockWorld(),
+                GoldCurrencyState.Address,
+                new GoldCurrencyState(Gold).Serialize());
         }
 
         public static IEnumerable<object[]> RegisterInfosMemberData()
@@ -197,7 +200,7 @@ namespace Lib9c.Tests.Action
             var actionContext = new ActionContext
             {
                 Signer = AgentAddress,
-                PreviousState = new MockWorld(_initialState),
+                PreviousState = _initialState,
                 Random = new TestRandom(),
             };
             foreach (var validateMember in validateMembers)
@@ -231,7 +234,7 @@ namespace Lib9c.Tests.Action
             var actionContext = new ActionContext
             {
                 Signer = AgentAddress,
-                PreviousState = new MockWorld(_initialState),
+                PreviousState = _initialState,
                 Random = new TestRandom(),
             };
             foreach (var validateMember in validateMembers)

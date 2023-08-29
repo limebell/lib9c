@@ -17,7 +17,7 @@ namespace Lib9c.Tests.Action
 
     public class ClaimStakeReward2Test
     {
-        private readonly IAccount _initialState;
+        private readonly IWorld _initialState;
         private readonly Currency _currency;
         private readonly GoldCurrencyState _goldCurrencyState;
         private readonly TableSheets _tableSheets;
@@ -33,15 +33,17 @@ namespace Lib9c.Tests.Action
                 .CreateLogger();
 
             var context = new ActionContext();
-            _initialState = new MockAccount();
+            _initialState = new MockWorld();
 
             var sheets = TableSheetsImporter.ImportSheets();
             sheets[nameof(StakeRegularRewardSheet)] =
                 ClaimStakeReward.V2.StakeRegularRewardSheetCsv;
             foreach (var (key, value) in sheets)
             {
-                _initialState = _initialState
-                    .SetState(Addresses.TableSheet.Derive(key), value.Serialize());
+                _initialState = LegacyModule.SetState(
+                    _initialState,
+                    Addresses.TableSheet.Derive(key),
+                    value.Serialize());
             }
 
             _tableSheets = new TableSheets(sheets);
@@ -83,24 +85,40 @@ namespace Lib9c.Tests.Action
                 level = 100,
             };
 
-            _initialState = _initialState
-                .SetState(_signerAddress, agentState.Serialize())
-                .SetState(_avatarAddress, avatarState.SerializeV2())
-                .SetState(
-                    _avatarAddress.Derive(LegacyInventoryKey),
-                    avatarState.inventory.Serialize())
-                .SetState(
-                    _avatarAddress.Derive(LegacyWorldInformationKey),
-                    avatarState.worldInformation.Serialize())
-                .SetState(
-                    _avatarAddress.Derive(LegacyQuestListKey),
-                    avatarState.questList.Serialize())
-                .SetState(
-                    _avatarAddressForBackwardCompatibility,
-                    avatarStateForBackwardCompatibility.Serialize())
-                .SetState(GoldCurrencyState.Address, _goldCurrencyState.Serialize())
-                .SetState(stakeStateAddress, new StakeState(stakeStateAddress, 0).Serialize())
-                .MintAsset(context, stakeStateAddress, _currency * 100);
+            _initialState = AgentModule.SetAgentState(_initialState, _signerAddress, agentState);
+            _initialState = AvatarModule.SetAvatarStateV2(
+                _initialState,
+                _avatarAddress,
+                avatarState);
+            _initialState = LegacyModule.SetState(
+                _initialState,
+                _avatarAddress.Derive(LegacyInventoryKey),
+                avatarState.inventory.Serialize());
+            _initialState = LegacyModule.SetState(
+                _initialState,
+                _avatarAddress.Derive(LegacyWorldInformationKey),
+                avatarState.worldInformation.Serialize());
+            _initialState = LegacyModule.SetState(
+                _initialState,
+                _avatarAddress.Derive(LegacyQuestListKey),
+                avatarState.questList.Serialize());
+            _initialState = AvatarModule.SetAvatarState(
+                _initialState,
+                _avatarAddressForBackwardCompatibility,
+                avatarStateForBackwardCompatibility);
+            _initialState = LegacyModule.SetState(
+                _initialState,
+                GoldCurrencyState.Address,
+                _goldCurrencyState.Serialize());
+            _initialState = LegacyModule.SetState(
+                _initialState,
+                stakeStateAddress,
+                new StakeState(stakeStateAddress, 0).Serialize());
+            _initialState = LegacyModule.MintAsset(
+                _initialState,
+                context,
+                stakeStateAddress,
+                _currency * 100);
         }
 
         [Fact]
@@ -134,7 +152,7 @@ namespace Lib9c.Tests.Action
             var action = new ClaimStakeReward2(_avatarAddress);
             Assert.Throws<ActionObsoletedException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(_initialState),
+                PreviousState = _initialState,
                 Signer = _signerAddress,
                 BlockIndex = ClaimStakeReward2.ObsoletedIndex + 1,
             }));
@@ -156,13 +174,16 @@ namespace Lib9c.Tests.Action
 4,50000,500000,800
 5,500000,400000,5
 5,500000,500000,800".Serialize();
-                state = state.SetState(Addresses.GetSheetAddress<StakeRegularRewardSheet>(), sheet);
+                state = LegacyModule.SetState(
+                    state,
+                    Addresses.GetSheetAddress<StakeRegularRewardSheet>(),
+                    sheet);
             }
 
             var action = new ClaimStakeReward2(avatarAddress);
             var states = action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = _signerAddress,
                 BlockIndex = StakeState.LockupInterval,
             });

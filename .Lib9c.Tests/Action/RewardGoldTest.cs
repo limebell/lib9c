@@ -37,8 +37,7 @@ namespace Lib9c.Tests.Action
     {
         private readonly AvatarState _avatarState;
         private readonly AvatarState _avatarState2;
-        private readonly MockAccount _baseAccount;
-        private readonly MockWorld _baseWorld;
+        private readonly IWorld _baseWorld;
         private readonly TableSheets _tableSheets;
 
         public RewardGoldTest()
@@ -78,11 +77,20 @@ namespace Lib9c.Tests.Action
             var gold = new GoldCurrencyState(Currency.Legacy("NCG", 2, null));
 #pragma warning restore CS0618
             IActionContext context = new ActionContext();
-            _baseAccount = (MockAccount)new MockAccount()
-                .SetState(GoldCurrencyState.Address, gold.Serialize())
-                .SetState(Addresses.GoldDistribution, GoldDistributionTest.Fixture.Select(v => v.Serialize()).Serialize())
-                .MintAsset(context, GoldCurrencyState.Address, gold.Currency * 100000000000);
-            _baseWorld = new MockWorld(_baseAccount);
+            _baseWorld = new MockWorld();
+            _baseWorld = LegacyModule.SetState(
+                _baseWorld,
+                GoldCurrencyState.Address,
+                gold.Serialize());
+            _baseWorld = LegacyModule.SetState(
+                _baseWorld,
+                Addresses.GoldDistribution,
+                GoldDistributionTest.Fixture.Select(v => v.Serialize()).Serialize());
+            _baseWorld = LegacyModule.MintAsset(
+                _baseWorld,
+                context,
+                GoldCurrencyState.Address,
+                gold.Currency * 100000000000);
         }
 
         [Theory]
@@ -100,9 +108,8 @@ namespace Lib9c.Tests.Action
                 ArenaScoreHelper.GetScoreV4);
             var gameConfigState = new GameConfigState();
             gameConfigState.Set(_tableSheets.GameConfigSheet);
-            var state = _baseAccount
-                .SetState(weekly.address, weekly.Serialize())
-                .SetState(gameConfigState.address, gameConfigState.Serialize());
+            var state = LegacyModule.SetState(_baseWorld, weekly.address, weekly.Serialize());
+            state = LegacyModule.SetState(state, gameConfigState.address, gameConfigState.Serialize());
             var blockIndex = 0;
 
             if (resetCount)
@@ -116,12 +123,9 @@ namespace Lib9c.Tests.Action
                 blockIndex = gameConfigState.WeeklyArenaInterval;
                 // Avoid NRE in test case.
                 var nextWeekly = new WeeklyArenaState(1);
-                state = state
-                    .SetState(weekly.address, weekly.Serialize())
-                    .SetState(nextWeekly.address, nextWeekly.Serialize());
+                state = LegacyModule.SetState(state, weekly.address, weekly.Serialize());
+                state = LegacyModule.SetState(state, nextWeekly.address, nextWeekly.Serialize());
             }
-
-            var world = _baseWorld.SetAccount(state);
 
             Assert.False(weekly.Ended);
             Assert.Equal(4, weekly[_avatarState.address].DailyChallengeCount);
@@ -131,14 +135,14 @@ namespace Lib9c.Tests.Action
             var ctx = new ActionContext()
             {
                 BlockIndex = blockIndex,
-                PreviousState = new MockWorld(_baseAccount),
+                PreviousState = _baseWorld,
                 Miner = default,
             };
 
             var worlds = new[]
             {
-                action.WeeklyArenaRankingBoard2(ctx, world),
-                action.WeeklyArenaRankingBoard(ctx, world),
+                action.WeeklyArenaRankingBoard2(ctx, state),
+                action.WeeklyArenaRankingBoard(ctx, state),
             };
 
             foreach (var nextWorld in worlds)
@@ -200,10 +204,15 @@ namespace Lib9c.Tests.Action
             var gameConfigState = new GameConfigState();
             gameConfigState.Set(_tableSheets.GameConfigSheet);
             var targetWeekly = new WeeklyArenaState(targetWeeklyIndex);
-            var state = _baseAccount
-                .SetState(prevWeekly.address, prevWeekly.Serialize())
-                .SetState(targetWeekly.address, targetWeekly.Serialize())
-                .SetState(gameConfigState.address, gameConfigState.Serialize());
+            var state = LegacyModule.SetState(
+                _baseWorld,
+                prevWeekly.address,
+                prevWeekly.Serialize());
+            state = LegacyModule.SetState(state, targetWeekly.address, targetWeekly.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                gameConfigState.address,
+                gameConfigState.Serialize());
 
             if (afterUpdate)
             {
@@ -216,21 +225,21 @@ namespace Lib9c.Tests.Action
                 Assert.Equal(4, prevInfo.DailyChallengeCount);
 
                 var inactiveInfo = new ArenaInfo(_avatarState2, _tableSheets.CharacterSheet, true);
-                state = state
-                    .SetState(
-                        prevWeekly.address.Derive(avatarAddress.ToByteArray()),
-                        prevInfo.Serialize())
-                    .SetState(
-                        prevWeekly.address.Derive(inactiveAvatarAddress.ToByteArray()),
-                        inactiveInfo.Serialize())
-                    .SetState(
-                        prevWeekly.address.Derive("address_list"),
-                        List.Empty
-                            .Add(avatarAddress.Serialize())
-                            .Add(inactiveAvatarAddress.Serialize()));
+                state = LegacyModule.SetState(
+                    state,
+                    prevWeekly.address.Derive(avatarAddress.ToByteArray()),
+                    prevInfo.Serialize());
+                state = LegacyModule.SetState(
+                    state,
+                    prevWeekly.address.Derive(inactiveAvatarAddress.ToByteArray()),
+                    inactiveInfo.Serialize());
+                state = LegacyModule.SetState(
+                    state,
+                    prevWeekly.address.Derive("address_list"),
+                    List.Empty
+                        .Add(avatarAddress.Serialize())
+                        .Add(inactiveAvatarAddress.Serialize()));
             }
-
-            var world = _baseWorld.SetAccount(state);
 
             Assert.False(prevWeekly.Ended);
 
@@ -239,11 +248,11 @@ namespace Lib9c.Tests.Action
             var ctx = new ActionContext()
             {
                 BlockIndex = blockIndex,
-                PreviousState = world,
+                PreviousState = state,
                 Miner = default,
             };
 
-            var nextWorld = action.PrepareNextArena(ctx, world);
+            var nextWorld = action.PrepareNextArena(ctx, state);
             var currentWeeklyState = LegacyModule.GetWeeklyArenaState(nextWorld, prevWeeklyIndex);
             var preparedWeeklyState = LegacyModule.GetWeeklyArenaState(nextWorld, targetWeeklyIndex);
 
@@ -312,12 +321,18 @@ namespace Lib9c.Tests.Action
             var gameConfigState = new GameConfigState();
             gameConfigState.Set(_tableSheets.GameConfigSheet);
             var migratedWeekly = new WeeklyArenaState(legacyWeeklyIndex + 1);
-            var state = _baseAccount
-                .SetState(legacyWeekly.address, legacyWeekly.Serialize())
-                .SetState(migratedWeekly.address, migratedWeekly.Serialize())
-                .SetState(gameConfigState.address, gameConfigState.Serialize());
-
-            var world = _baseWorld.SetAccount(state);
+            var state = LegacyModule.SetState(
+                _baseWorld,
+                legacyWeekly.address,
+                legacyWeekly.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                migratedWeekly.address,
+                migratedWeekly.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                gameConfigState.address,
+                gameConfigState.Serialize());
 
             Assert.False(legacyWeekly.Ended);
 
@@ -326,21 +341,21 @@ namespace Lib9c.Tests.Action
             var migrationCtx = new ActionContext
             {
                 BlockIndex = RewardGold.RankingBattle11UpdateTargetBlockIndex,
-                PreviousState = world,
+                PreviousState = state,
                 Miner = default,
             };
 
             var arenaInfoAddress = migratedWeekly.address.Derive(_avatarState.address.ToByteArray());
             var addressListAddress = migratedWeekly.address.Derive("address_list");
 
-            Assert.False(LegacyModule.TryGetState(world, arenaInfoAddress, out Dictionary _));
-            Assert.False(LegacyModule.TryGetState(world, addressListAddress, out List _));
+            Assert.False(LegacyModule.TryGetState(state, arenaInfoAddress, out Dictionary _));
+            Assert.False(LegacyModule.TryGetState(state, addressListAddress, out List _));
 
             // Ready to address list, ArenaInfo state.
-            world = action.PrepareNextArena(migrationCtx, world);
+            state = action.PrepareNextArena(migrationCtx, state);
 
-            Assert.True(LegacyModule.TryGetState(world, arenaInfoAddress, out Dictionary prevRawInfo));
-            Assert.True(LegacyModule.TryGetState(world, addressListAddress, out List _));
+            Assert.True(LegacyModule.TryGetState(state, arenaInfoAddress, out Dictionary prevRawInfo));
+            Assert.True(LegacyModule.TryGetState(state, addressListAddress, out List _));
 
             var prevInfo = new ArenaInfo(prevRawInfo);
             prevInfo.Update(
@@ -355,14 +370,14 @@ namespace Lib9c.Tests.Action
             var ctx = new ActionContext
             {
                 BlockIndex = blockIndex,
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Miner = default,
             };
 
-            var nextWorld = action.ResetChallengeCount(ctx, world);
+            var nextWorld = action.ResetChallengeCount(ctx, state);
 
-            Assert.True(LegacyModule.TryGetState(world, arenaInfoAddress, out Dictionary rawInfo));
-            Assert.True(LegacyModule.TryGetState(world, addressListAddress, out List rawList));
+            Assert.True(LegacyModule.TryGetState(state, arenaInfoAddress, out Dictionary rawInfo));
+            Assert.True(LegacyModule.TryGetState(state, addressListAddress, out List rawList));
 
             var updatedWeekly = LegacyModule.GetWeeklyArenaState(nextWorld, migratedWeekly.address);
             var info = new ArenaInfo(rawInfo);
@@ -584,14 +599,32 @@ namespace Lib9c.Tests.Action
             var patronAddress = new PrivateKey().ToAddress();
             var contractAddress = agentAddress.GetPledgeAddress();
             IActionContext context = new ActionContext();
-            IAccount states = new MockAccount()
-                .MintAsset(context, patronAddress, patronMead * Currencies.Mead)
-                .TransferAsset(context, patronAddress, agentAddress, 1 * Currencies.Mead)
-                .SetState(contractAddress, List.Empty.Add(patronAddress.Serialize()).Add(true.Serialize()).Add(balance.Serialize()))
-                .BurnAsset(context, agentAddress, 1 * Currencies.Mead);
+            IWorld states = new MockWorld();
+            states = LegacyModule.MintAsset(
+                states,
+                context,
+                patronAddress,
+                patronMead * Currencies.Mead);
+            states = LegacyModule.TransferAsset(
+                states,
+                context,
+                patronAddress,
+                agentAddress,
+                1 * Currencies.Mead);
+            states = LegacyModule.SetState(
+                states,
+                contractAddress,
+                List.Empty.Add(patronAddress.Serialize())
+                    .Add(true.Serialize())
+                    .Add(balance.Serialize()));
+            states = LegacyModule.BurnAsset(states, context, agentAddress, 1 * Currencies.Mead);
             IWorld world = new MockWorld(states);
-            Assert.Equal(balance * Currencies.Mead, states.GetBalance(patronAddress, Currencies.Mead));
-            Assert.Equal(0 * Currencies.Mead, states.GetBalance(agentAddress, Currencies.Mead));
+            Assert.Equal(
+                balance * Currencies.Mead,
+                LegacyModule.GetBalance(states, patronAddress, Currencies.Mead));
+            Assert.Equal(
+                0 * Currencies.Mead,
+                LegacyModule.GetBalance(states, agentAddress, Currencies.Mead));
 
             var nextState = RewardGold.TransferMead(context, world).GetAccount(ReservedAddresses.LegacyAccount);
             // transfer mead from patron to agent

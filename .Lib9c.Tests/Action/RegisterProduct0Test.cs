@@ -33,7 +33,7 @@ namespace Lib9c.Tests.Action
         private readonly AvatarState _avatarState;
         private readonly TableSheets _tableSheets;
         private readonly GameConfigState _gameConfigState;
-        private IAccount _initialState;
+        private IWorld _initialState;
 
         public RegisterProduct0Test()
         {
@@ -57,12 +57,20 @@ namespace Lib9c.Tests.Action
             };
             agentState.avatarAddresses[0] = AvatarAddress;
 
-            _initialState = new MockAccount()
-                .SetState(GoldCurrencyState.Address, new GoldCurrencyState(Gold).Serialize())
-                .SetState(Addresses.GetSheetAddress<MaterialItemSheet>(), _tableSheets.MaterialItemSheet.Serialize())
-                .SetState(Addresses.GameConfig, _gameConfigState.Serialize())
-                .SetState(_agentAddress, agentState.Serialize())
-                .SetState(AvatarAddress, _avatarState.Serialize());
+            _initialState = LegacyModule.SetState(
+                new MockWorld(),
+                GoldCurrencyState.Address,
+                new GoldCurrencyState(Gold).Serialize());
+            _initialState = LegacyModule.SetState(
+                _initialState,
+                Addresses.GetSheetAddress<MaterialItemSheet>(),
+                _tableSheets.MaterialItemSheet.Serialize());
+            _initialState = LegacyModule.SetState(
+                _initialState,
+                Addresses.GameConfig,
+                _gameConfigState.Serialize());
+            _initialState = AgentModule.SetAgentState(_initialState, _agentAddress, agentState);
+            _initialState = AvatarModule.SetAvatarState(_initialState, AvatarAddress, _avatarState);
         }
 
         public static IEnumerable<object[]> Execute_Validate_MemberData()
@@ -209,9 +217,8 @@ namespace Lib9c.Tests.Action
             Assert.Equal(2, _avatarState.inventory.Items.Count);
             var asset = 3 * RuneHelper.DailyRewardRune;
             var context = new ActionContext();
-            _initialState = _initialState
-                .SetState(AvatarAddress, _avatarState.Serialize())
-                .MintAsset(context, AvatarAddress, asset);
+            _initialState = AvatarModule.SetAvatarState(_initialState, AvatarAddress, _avatarState);
+            _initialState = LegacyModule.MintAsset(_initialState, context, AvatarAddress, asset);
             var action = new RegisterProduct0
             {
                 AvatarAddress = AvatarAddress,
@@ -245,7 +252,7 @@ namespace Lib9c.Tests.Action
             var nextWorld = action.Execute(new ActionContext
             {
                 BlockIndex = 1L,
-                PreviousState = new MockWorld(_initialState),
+                PreviousState = _initialState,
                 Random = new TestRandom(),
                 Signer = _agentAddress,
             });
@@ -300,7 +307,7 @@ namespace Lib9c.Tests.Action
                     };
                     Assert.Throws(validateMember.Exc, () => action.Execute(new ActionContext
                     {
-                        PreviousState = new MockWorld(_initialState),
+                        PreviousState = _initialState,
                         Random = new TestRandom(),
                         Signer = _agentAddress,
                     }));
@@ -351,7 +358,7 @@ namespace Lib9c.Tests.Action
                 _avatarState.inventory.AddItem((ItemBase)tradableItem);
             }
 
-            _initialState = _initialState.SetState(AvatarAddress, _avatarState.Serialize());
+            _initialState = AvatarModule.SetAvatarState(_initialState, AvatarAddress, _avatarState);
             var action = new RegisterProduct0
             {
                 AvatarAddress = AvatarAddress,
@@ -373,7 +380,7 @@ namespace Lib9c.Tests.Action
                 Signer = _agentAddress,
                 BlockIndex = blockIndex,
                 Random = new TestRandom(),
-                PreviousState = new MockWorld(_initialState),
+                PreviousState = _initialState,
             }));
         }
 

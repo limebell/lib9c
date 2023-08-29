@@ -32,7 +32,6 @@ namespace Lib9c.Tests.Action
         private readonly TableSheets _tableSheets;
         private readonly GoldCurrencyState _goldCurrencyState;
         private readonly GameConfigState _gameConfigState;
-        private IAccount _initialAccount;
         private IWorld _initialWorld;
 
         public ReRegisterProduct0Test(ITestOutputHelper outputHelper)
@@ -42,12 +41,14 @@ namespace Lib9c.Tests.Action
                 .WriteTo.TestOutput(outputHelper)
                 .CreateLogger();
 
-            _initialAccount = new MockAccount();
+            _initialWorld = new MockWorld();
             var sheets = TableSheetsImporter.ImportSheets();
             foreach (var (key, value) in sheets)
             {
-                _initialAccount = _initialAccount
-                    .SetState(Addresses.TableSheet.Derive(key), value.Serialize());
+                _initialWorld = LegacyModule.SetState(
+                    _initialWorld,
+                    Addresses.TableSheet.Derive(key),
+                    value.Serialize());
             }
 
             _tableSheets = new TableSheets(sheets);
@@ -80,13 +81,20 @@ namespace Lib9c.Tests.Action
             };
             agentState.avatarAddresses[0] = _avatarAddress;
 
-            _initialAccount = _initialAccount
-                .SetState(GoldCurrencyState.Address, _goldCurrencyState.Serialize())
-                .SetState(Addresses.Shop, shopState.Serialize())
-                .SetState(_agentAddress, agentState.Serialize())
-                .SetState(Addresses.GameConfig, _gameConfigState.Serialize())
-                .SetState(_avatarAddress, _avatarState.Serialize());
-            _initialWorld = new MockWorld(_initialAccount);
+            _initialWorld = LegacyModule.SetState(
+                _initialWorld,
+                GoldCurrencyState.Address,
+                _goldCurrencyState.Serialize());
+            _initialWorld = LegacyModule.SetState(
+                _initialWorld,
+                Addresses.Shop,
+                shopState.Serialize());
+            _initialWorld = AgentModule.SetAgentState(_initialWorld, _agentAddress, agentState);
+            _initialWorld = LegacyModule.SetState(
+                _initialWorld,
+                Addresses.GameConfig,
+                _gameConfigState.Serialize());
+            _initialWorld = AvatarModule.SetAvatarState(_initialWorld, _avatarAddress, _avatarState);
         }
 
         [Theory]
@@ -163,7 +171,7 @@ namespace Lib9c.Tests.Action
             );
 
             var orderDigestList = new OrderDigestListState(OrderDigestListState.DeriveAddress(_avatarAddress));
-            var prevState = _initialAccount;
+            var prevState = _initialWorld;
 
             if (inventoryCount > 1)
             {
@@ -200,26 +208,40 @@ namespace Lib9c.Tests.Action
 
             if (fromPreviousAction)
             {
-                prevState = prevState.SetState(_avatarAddress, avatarState.Serialize());
+                prevState = AvatarModule.SetAvatarState(prevState, _avatarAddress, avatarState);
             }
             else
             {
-                prevState = prevState
-                    .SetState(_avatarAddress.Derive(LegacyInventoryKey), avatarState.inventory.Serialize())
-                    .SetState(_avatarAddress.Derive(LegacyWorldInformationKey), avatarState.worldInformation.Serialize())
-                    .SetState(_avatarAddress.Derive(LegacyQuestListKey), avatarState.questList.Serialize())
-                    .SetState(_avatarAddress, avatarState.SerializeV2());
+                prevState = LegacyModule.SetState(
+                    prevState,
+                    _avatarAddress.Derive(LegacyInventoryKey),
+                    avatarState.inventory.Serialize());
+                prevState = LegacyModule.SetState(
+                    prevState,
+                    _avatarAddress.Derive(LegacyWorldInformationKey),
+                    avatarState.worldInformation.Serialize());
+                prevState = LegacyModule.SetState(
+                    prevState,
+                    _avatarAddress.Derive(LegacyQuestListKey),
+                    avatarState.questList.Serialize());
+                prevState = AvatarModule.SetAvatarStateV2(prevState, _avatarAddress, avatarState);
             }
 
-            prevState = prevState
-                .SetState(Addresses.GetItemAddress(itemId), sellItem.Serialize())
-                .SetState(Order.DeriveAddress(order.OrderId), order.Serialize())
-                .SetState(orderDigestList.Address, orderDigestList.Serialize())
-                .SetState(shardedShopAddress, shopState.Serialize());
+            prevState = LegacyModule.SetState(
+                prevState,
+                Addresses.GetItemAddress(itemId),
+                sellItem.Serialize());
+            prevState = LegacyModule.SetState(
+                prevState,
+                Order.DeriveAddress(order.OrderId),
+                order.Serialize());
+            prevState = LegacyModule.SetState(
+                prevState,
+                orderDigestList.Address,
+                orderDigestList.Serialize());
+            prevState = LegacyModule.SetState(prevState, shardedShopAddress, shopState.Serialize());
 
-            var world = _initialWorld.SetAccount(prevState);
-
-            var currencyState = LegacyModule.GetGoldCurrency(world);
+            var currencyState = LegacyModule.GetGoldCurrency(prevState);
             var price = new FungibleAssetValue(currencyState, ProductPrice, 0);
 
             var updateSellInfo = new UpdateSellInfo(
@@ -240,7 +262,7 @@ namespace Lib9c.Tests.Action
             var expectedState = action.Execute(new ActionContext
             {
                 BlockIndex = 101,
-                PreviousState = new MockWorld(prevState),
+                PreviousState = prevState,
                 Random = new TestRandom(),
                 Rehearsal = false,
                 Signer = _agentAddress,
@@ -287,7 +309,7 @@ namespace Lib9c.Tests.Action
             var actualWorld = reRegister.Execute(new ActionContext
             {
                 BlockIndex = 101,
-                PreviousState = new MockWorld(prevState),
+                PreviousState = prevState,
                 Random = new TestRandom(),
                 Rehearsal = false,
                 Signer = _agentAddress,

@@ -23,7 +23,7 @@ namespace Lib9c.Tests.Action.Coupons
             IRandom random = new TestRandom();
             var sheets = TableSheetsImporter.ImportSheets();
             IWorld world = new MockWorld(
-                new MockAccount()
+                new MockAccount(ReservedAddresses.LegacyAccount)
                     .SetState(
                         Addresses.GameConfig,
                         new GameConfigState(sheets[nameof(GameConfigSheet)]).Serialize()

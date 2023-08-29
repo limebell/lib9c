@@ -25,7 +25,6 @@ namespace Lib9c.Tests.Action
 
     public class RapidCombinationTest
     {
-        private readonly IAccount _initialAccount;
         private readonly IWorld _initialWorld;
 
         private readonly TableSheets _tableSheets;
@@ -35,12 +34,13 @@ namespace Lib9c.Tests.Action
 
         public RapidCombinationTest()
         {
-            _initialAccount = new MockAccount();
+            _initialWorld = new MockWorld();
 
             var sheets = TableSheetsImporter.ImportSheets();
             foreach (var (key, value) in sheets)
             {
-                _initialAccount = _initialAccount.SetState(
+                _initialWorld = LegacyModule.SetState(
+                    _initialWorld,
                     Addresses.TableSheet.Derive(key),
                     value.Serialize());
             }
@@ -62,12 +62,17 @@ namespace Lib9c.Tests.Action
 
             agentState.avatarAddresses[0] = _avatarAddress;
 
-            _initialAccount = _initialAccount
-                .SetState(Addresses.GameConfig, new GameConfigState(sheets[nameof(GameConfigSheet)]).Serialize())
-                .SetState(_agentAddress, agentState.Serialize())
-                .SetState(_avatarAddress, avatarState.Serialize());
-
-            _initialWorld = new MockWorld(_initialAccount);
+            _initialWorld =
+                LegacyModule.SetState(
+                    _initialWorld,
+                    Addresses.GameConfig,
+                    new GameConfigState(
+                        sheets[nameof(GameConfigSheet)]).Serialize());
+            _initialWorld = AgentModule.SetAgentState(_initialWorld, _agentAddress, agentState);
+            _initialWorld = AvatarModule.SetAvatarStateV2(
+                _initialWorld,
+                _avatarAddress,
+                avatarState);
         }
 
         [Theory]
@@ -121,22 +126,31 @@ namespace Lib9c.Tests.Action
             var slotState = new CombinationSlotState(slotAddress, slotStateUnlockStage);
             slotState.Update(result, 0, requiredBlockIndex);
 
-            var tempState = _initialAccount.SetState(slotAddress, slotState.Serialize());
+            var tempState = LegacyModule.SetState(
+                _initialWorld,
+                slotAddress,
+                slotState.Serialize());
 
             if (backward)
             {
-                tempState = tempState.SetState(_avatarAddress, avatarState.Serialize());
+                tempState = AvatarModule.SetAvatarState(tempState, _avatarAddress, avatarState);
             }
             else
             {
-                tempState = tempState
-                    .SetState(_avatarAddress.Derive(LegacyInventoryKey), avatarState.inventory.Serialize())
-                    .SetState(_avatarAddress.Derive(LegacyWorldInformationKey), avatarState.worldInformation.Serialize())
-                    .SetState(_avatarAddress.Derive(LegacyQuestListKey), avatarState.questList.Serialize())
-                    .SetState(_avatarAddress, avatarState.SerializeV2());
+                tempState = LegacyModule.SetState(
+                    tempState,
+                    _avatarAddress.Derive(LegacyInventoryKey),
+                    avatarState.inventory.Serialize());
+                tempState = LegacyModule.SetState(
+                    tempState,
+                    _avatarAddress.Derive(LegacyWorldInformationKey),
+                    avatarState.worldInformation.Serialize());
+                tempState = LegacyModule.SetState(
+                    tempState,
+                    _avatarAddress.Derive(LegacyQuestListKey),
+                    avatarState.questList.Serialize());
+                tempState = AvatarModule.SetAvatarStateV2(tempState, _avatarAddress, avatarState);
             }
-
-            var tempWorld = _initialWorld.SetAccount(tempState);
 
             var action = new RapidCombination
             {
@@ -146,7 +160,7 @@ namespace Lib9c.Tests.Action
 
             var nextState = action.Execute(new ActionContext
             {
-                PreviousState = tempWorld,
+                PreviousState = tempState,
                 Signer = _agentAddress,
                 BlockIndex = 51,
             });
@@ -169,8 +183,10 @@ namespace Lib9c.Tests.Action
             var slotState = new CombinationSlotState(slotAddress, 0);
             slotState.Update(null, 0, 0);
 
-            var tempState = _initialAccount
-                .SetState(slotAddress, slotState.Serialize());
+            var tempState = LegacyModule.SetState(
+                _initialWorld,
+                slotAddress,
+                slotState.Serialize());
 
             var action = new RapidCombination
             {
@@ -180,7 +196,7 @@ namespace Lib9c.Tests.Action
 
             Assert.Throws<CombinationSlotResultNullException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(tempState),
+                PreviousState = tempState,
                 Signer = _agentAddress,
                 BlockIndex = 1,
             }));
@@ -222,9 +238,8 @@ namespace Lib9c.Tests.Action
             var slotState = new CombinationSlotState(slotAddress, slotStateUnlockStage);
             slotState.Update(result, 0, 0);
 
-            var tempState = _initialAccount
-                .SetState(_avatarAddress, avatarState.Serialize())
-                .SetState(slotAddress, slotState.Serialize());
+            var tempState = AvatarModule.SetAvatarState(_initialWorld, _avatarAddress, avatarState);
+            tempState = LegacyModule.SetState(tempState, slotAddress, slotState.Serialize());
 
             var action = new RapidCombination
             {
@@ -234,7 +249,7 @@ namespace Lib9c.Tests.Action
 
             Assert.Throws<NotEnoughClearedStageLevelException>(() => action.Execute(new ActionContext
             {
-                PreviousState = _initialWorld.SetAccount(tempState),
+                PreviousState = tempState,
                 Signer = _agentAddress,
                 BlockIndex = 1,
             }));
@@ -278,9 +293,8 @@ namespace Lib9c.Tests.Action
             var slotState = new CombinationSlotState(slotAddress, avatarClearedStage);
             slotState.Update(result, 0, 0);
 
-            var tempState = _initialAccount
-                .SetState(_avatarAddress, avatarState.Serialize())
-                .SetState(slotAddress, slotState.Serialize());
+            var tempState = AvatarModule.SetAvatarState(_initialWorld, _avatarAddress, avatarState);
+            tempState = LegacyModule.SetState(tempState, slotAddress, slotState.Serialize());
 
             var action = new RapidCombination
             {
@@ -290,7 +304,7 @@ namespace Lib9c.Tests.Action
 
             Assert.Throws<RequiredBlockIndexException>(() => action.Execute(new ActionContext
             {
-                PreviousState = _initialWorld.SetAccount(tempState),
+                PreviousState = tempState,
                 Signer = _agentAddress,
                 BlockIndex = contextBlockIndex,
             }));
@@ -354,9 +368,8 @@ namespace Lib9c.Tests.Action
             var slotState = new CombinationSlotState(slotAddress, slotStateUnlockStage);
             slotState.Update(result, 0, 0);
 
-            var tempState = _initialAccount
-                .SetState(_avatarAddress, avatarState.Serialize())
-                .SetState(slotAddress, slotState.Serialize());
+            var tempState = AvatarModule.SetAvatarState(_initialWorld, _avatarAddress, avatarState);
+            tempState = LegacyModule.SetState(tempState, slotAddress, slotState.Serialize());
 
             var action = new RapidCombination
             {
@@ -366,7 +379,7 @@ namespace Lib9c.Tests.Action
 
             Assert.Throws<NotEnoughMaterialException>(() => action.Execute(new ActionContext
             {
-                PreviousState = _initialWorld.SetAccount(tempState),
+                PreviousState = tempState,
                 Signer = _agentAddress,
                 BlockIndex = 51,
             }));
@@ -392,8 +405,6 @@ namespace Lib9c.Tests.Action
                 slotAddress,
             };
 
-            var state = new MockAccount();
-
             var action = new RapidCombination
             {
                 avatarAddress = _avatarAddress,
@@ -402,7 +413,7 @@ namespace Lib9c.Tests.Action
 
             var nextState = action.Execute(new ActionContext()
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = new MockWorld(),
                 Signer = _agentAddress,
                 BlockIndex = 0,
                 Rehearsal = true,
@@ -522,9 +533,8 @@ namespace Lib9c.Tests.Action
             var slotState = new CombinationSlotState(slotAddress, slotStateUnlockStage);
             slotState.Update(result, 0, 0);
 
-            var tempState = _initialAccount
-                .SetState(_avatarAddress, avatarState.Serialize())
-                .SetState(slotAddress, slotState.Serialize());
+            var tempState = AvatarModule.SetAvatarState(_initialWorld, _avatarAddress, avatarState);
+            tempState = LegacyModule.SetState(tempState, slotAddress, slotState.Serialize());
 
             var action = new RapidCombination
             {
@@ -534,7 +544,7 @@ namespace Lib9c.Tests.Action
 
             Assert.Throws<AppraiseBlockNotReachedException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(tempState),
+                PreviousState = tempState,
                 Signer = _agentAddress,
                 BlockIndex = 1,
             }));
@@ -667,11 +677,23 @@ namespace Lib9c.Tests.Action
             var slotState = new CombinationSlotState(slotAddress, slotStateUnlockStage);
             slotState.Update(resultModel, 0, requiredBlockIndex);
 
-            var tempState = _initialAccount.SetState(slotAddress, slotState.Serialize())
-                .SetState(_avatarAddress.Derive(LegacyInventoryKey), avatarState.inventory.Serialize())
-                .SetState(_avatarAddress.Derive(LegacyWorldInformationKey), avatarState.worldInformation.Serialize())
-                .SetState(_avatarAddress.Derive(LegacyQuestListKey), avatarState.questList.Serialize())
-                .SetState(_avatarAddress, avatarState.SerializeV2());
+            var tempState = LegacyModule.SetState(
+                _initialWorld,
+                slotAddress,
+                slotState.Serialize());
+            tempState = LegacyModule.SetState(
+                tempState,
+                _avatarAddress.Derive(LegacyInventoryKey),
+                avatarState.inventory.Serialize());
+            tempState = LegacyModule.SetState(
+                tempState,
+                _avatarAddress.Derive(LegacyWorldInformationKey),
+                avatarState.worldInformation.Serialize());
+            tempState = LegacyModule.SetState(
+                tempState,
+                _avatarAddress.Derive(LegacyQuestListKey),
+                avatarState.questList.Serialize());
+            tempState = AvatarModule.SetAvatarStateV2(tempState, _avatarAddress, avatarState);
 
             var action = new RapidCombination
             {
@@ -681,7 +703,7 @@ namespace Lib9c.Tests.Action
 
             action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(tempState),
+                PreviousState = tempState,
                 Signer = _agentAddress,
                 BlockIndex = 51,
             });

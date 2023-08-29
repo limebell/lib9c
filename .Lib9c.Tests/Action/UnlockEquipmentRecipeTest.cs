@@ -26,7 +26,6 @@ namespace Lib9c.Tests.Action
         private readonly Address _avatarAddress;
         private readonly AvatarState _avatarState;
         private readonly Currency _currency;
-        private readonly IAccount _initialAccount;
         private readonly IWorld _initialWorld;
 
         public UnlockEquipmentRecipeTest()
@@ -54,12 +53,22 @@ namespace Lib9c.Tests.Action
 
             agentState.avatarAddresses.Add(0, _avatarAddress);
 
-            _initialAccount = new MockAccount()
-                .SetState(_agentAddress, agentState.Serialize())
-                .SetState(Addresses.GetSheetAddress<EquipmentItemSheet>(), _tableSheets.EquipmentItemSheet.Serialize())
-                .SetState(Addresses.GetSheetAddress<EquipmentItemRecipeSheet>(), _tableSheets.EquipmentItemRecipeSheet.Serialize())
-                .SetState(Addresses.GameConfig, gameConfigState.Serialize());
-            _initialWorld = new MockWorld(_initialAccount);
+            _initialWorld = AgentModule.SetAgentState(
+                new MockWorld(),
+                _agentAddress,
+                agentState);
+            _initialWorld = LegacyModule.SetState(
+                _initialWorld,
+                Addresses.GetSheetAddress<EquipmentItemSheet>(),
+                _tableSheets.EquipmentItemSheet.Serialize());
+            _initialWorld = LegacyModule.SetState(
+                _initialWorld,
+                Addresses.GetSheetAddress<EquipmentItemRecipeSheet>(),
+                _tableSheets.EquipmentItemRecipeSheet.Serialize());
+            _initialWorld = LegacyModule.SetState(
+                _initialWorld,
+                Addresses.GameConfig,
+                gameConfigState.Serialize());
         }
 
         [Theory]
@@ -97,7 +106,11 @@ namespace Lib9c.Tests.Action
         )
         {
             var context = new ActionContext();
-            var state = _initialAccount.MintAsset(context, _agentAddress, balance * _currency);
+            var state = LegacyModule.MintAsset(
+                _initialWorld,
+                context,
+                _agentAddress,
+                balance * _currency);
             List<int> recipeIds = ids.ToList();
             Address unlockedRecipeIdsAddress = _avatarAddress.Derive("recipe_ids");
             if (stateExist)
@@ -119,20 +132,28 @@ namespace Lib9c.Tests.Action
                 if (alreadyUnlocked)
                 {
                     var serializedIds = new List(recipeIds.Select(i => i.Serialize()));
-                    state = state.SetState(unlockedRecipeIdsAddress, serializedIds);
+                    state = LegacyModule.SetState(state, unlockedRecipeIdsAddress, serializedIds);
                 }
 
                 if (migrationRequired)
                 {
-                    state = state.SetState(_avatarAddress, _avatarState.Serialize());
+                    state = AvatarModule.SetAvatarState(state, _avatarAddress, _avatarState);
                 }
                 else
                 {
-                    state = state
-                        .SetState(_avatarAddress.Derive(LegacyInventoryKey), _avatarState.inventory.Serialize())
-                        .SetState(_avatarAddress.Derive(LegacyWorldInformationKey), worldInformation.Serialize())
-                        .SetState(_avatarAddress.Derive(LegacyQuestListKey), _avatarState.questList.Serialize())
-                        .SetState(_avatarAddress, _avatarState.SerializeV2());
+                    state = LegacyModule.SetState(
+                        state,
+                        _avatarAddress.Derive(LegacyInventoryKey),
+                        _avatarState.inventory.Serialize());
+                    state = LegacyModule.SetState(
+                        state,
+                        _avatarAddress.Derive(LegacyWorldInformationKey),
+                        worldInformation.Serialize());
+                    state = LegacyModule.SetState(
+                        state,
+                        _avatarAddress.Derive(LegacyQuestListKey),
+                        _avatarState.questList.Serialize());
+                    state = AvatarModule.SetAvatarStateV2(state, _avatarAddress, _avatarState);
                 }
             }
 

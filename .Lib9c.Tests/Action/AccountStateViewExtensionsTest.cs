@@ -69,7 +69,10 @@ namespace Lib9c.Tests.Action
         [Fact]
         public void TryGetAvatarStateAddressKeyNotFoundException()
         {
-            IWorld states = new MockWorld(new MockAccount().SetState(default, Dictionary.Empty));
+            IWorld states = new MockWorld(
+                new MockAccount(Addresses.Avatar).SetState(
+                    default,
+                    Dictionary.Empty));
 
             Assert.False(AvatarModule.TryGetAvatarState(states, default, default, out _));
         }
@@ -77,12 +80,13 @@ namespace Lib9c.Tests.Action
         [Fact]
         public void TryGetAvatarStateKeyNotFoundException()
         {
-            IWorld states = new MockWorld(new MockAccount()
-                .SetState(
-                default,
-                Dictionary.Empty
-                    .Add("agentAddress", default(Address).Serialize())
-            ));
+            IWorld states = new MockWorld(
+                new MockAccount(Addresses.Avatar)
+                    .SetState(
+                        default,
+                        Dictionary.Empty
+                            .Add("agentAddress", default(Address).Serialize())
+                    ));
 
             Assert.False(AvatarModule.TryGetAvatarState(states, default, default, out _));
         }
@@ -90,7 +94,8 @@ namespace Lib9c.Tests.Action
         [Fact]
         public void TryGetAvatarStateInvalidCastException()
         {
-            IWorld states = new MockWorld(new MockAccount().SetState(default, default(Text)));
+            IWorld states = new MockWorld(
+                new MockAccount(Addresses.Avatar).SetState(default, default(Text)));
 
             Assert.False(AvatarModule.TryGetAvatarState(states, default, default, out _));
         }
@@ -98,9 +103,15 @@ namespace Lib9c.Tests.Action
         [Fact]
         public void TryGetAvatarStateInvalidAddress()
         {
-            IWorld states = new MockWorld(new MockAccount().SetState(default, _avatarState.Serialize()));
+            IWorld states = new MockWorld(
+                new MockAccount(Addresses.Avatar).SetState(default, _avatarState.Serialize()));
 
-            Assert.False(AvatarModule.TryGetAvatarState(states, Addresses.GameConfig, _avatarAddress, out _));
+            Assert.False(
+                AvatarModule.TryGetAvatarState(
+                    states,
+                    Addresses.GameConfig,
+                    _avatarAddress,
+                    out _));
         }
 
         [Fact]
@@ -200,10 +211,20 @@ namespace Lib9c.Tests.Action
                     states,
                     _avatarAddress.Derive(LegacyWorldInformationKey),
                     _avatarState.worldInformation.Serialize());
-                states = LegacyModule.SetState(states, _avatarAddress.Derive(LegacyQuestListKey), _avatarState.questList.Serialize());
+                states = LegacyModule.SetState(
+                    states,
+                    _avatarAddress.Derive(LegacyQuestListKey),
+                    _avatarState.questList.Serialize());
             }
 
-            Assert.True(AvatarModule.TryGetAgentAvatarStatesV2(states, _agentAddress, _avatarAddress, out _, out _, out bool avatarMigrationRequired));
+            Assert.True(
+                AvatarModule.TryGetAgentAvatarStatesV2(
+                    states,
+                    _agentAddress,
+                    _avatarAddress,
+                    out _,
+                    out _,
+                    out bool avatarMigrationRequired));
             Assert.Equal(backward, avatarMigrationRequired);
         }
 

@@ -9,7 +9,7 @@ namespace Lib9c.Tests.Action
 
     public class RenewAdminStateTest
     {
-        private IAccount _stateDelta;
+        private IWorld _stateDelta;
         private long _validUntil;
         private AdminState _adminState;
         private PrivateKey _adminPrivateKey;
@@ -19,9 +19,9 @@ namespace Lib9c.Tests.Action
             _adminPrivateKey = new PrivateKey();
             _validUntil = 1_500_000L;
             _adminState = new AdminState(_adminPrivateKey.ToAddress(), _validUntil);
-            _stateDelta = new MockAccount(
-                MockAccountState.Empty
-                    .SetState(Addresses.Admin, _adminState.Serialize()));
+            _stateDelta = new MockWorld(new MockAccount(
+                MockAccountState.Legacy
+                    .SetState(Addresses.Admin, _adminState.Serialize())));
         }
 
         [Fact]
@@ -31,7 +31,7 @@ namespace Lib9c.Tests.Action
             var action = new RenewAdminState(newValidUntil);
             var stateDelta = action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(_stateDelta),
+                PreviousState = _stateDelta,
                 Signer = _adminPrivateKey.ToAddress(),
             }).GetAccount(ReservedAddresses.LegacyAccount);
 
@@ -50,7 +50,7 @@ namespace Lib9c.Tests.Action
                 var userPrivateKey = new PrivateKey();
                 action.Execute(new ActionContext
                 {
-                    PreviousState = new MockWorld(_stateDelta),
+                    PreviousState = _stateDelta,
                     Signer = userPrivateKey.ToAddress(),
                 });
             });
@@ -64,7 +64,7 @@ namespace Lib9c.Tests.Action
             var stateDelta = action.Execute(new ActionContext
             {
                 BlockIndex = _validUntil + 1,
-                PreviousState = new MockWorld(_stateDelta),
+                PreviousState = _stateDelta,
                 Signer = _adminPrivateKey.ToAddress(),
             }).GetAccount(ReservedAddresses.LegacyAccount);
 

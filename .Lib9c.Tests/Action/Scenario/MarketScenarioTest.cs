@@ -104,17 +104,47 @@ namespace Lib9c.Tests.Action.Scenario
             agentState3.avatarAddresses[0] = _buyerAvatarAddress;
 
             _currency = Currency.Legacy("NCG", 2, minters: null);
-            _initialState = new MockWorld(new Tests.Action.MockAccount()
-                .SetState(GoldCurrencyState.Address, new GoldCurrencyState(_currency).Serialize())
-                .SetState(Addresses.GameConfig, _gameConfigState.Serialize())
-                .SetState(Addresses.GetSheetAddress<MaterialItemSheet>(), _tableSheets.MaterialItemSheet.Serialize())
-                .SetState(Addresses.GetSheetAddress<ArenaSheet>(), _tableSheets.ArenaSheet.Serialize())
-                .SetState(_sellerAgentAddress, agentState.Serialize())
-                .SetState(_sellerAvatarAddress, _sellerAvatarState.Serialize())
-                .SetState(_sellerAgentAddress2, agentState2.Serialize())
-                .SetState(_sellerAvatarAddress2, _sellerAvatarState2.Serialize())
-                .SetState(_buyerAgentAddress, agentState3.Serialize())
-                .SetState(_buyerAvatarAddress, buyerAvatarState.Serialize()));
+            _initialState = new MockWorld();
+            _initialState = LegacyModule.SetState(
+                _initialState,
+                GoldCurrencyState.Address,
+                new GoldCurrencyState(_currency).Serialize());
+            _initialState = LegacyModule.SetState(
+                _initialState,
+                Addresses.GameConfig,
+                _gameConfigState.Serialize());
+            _initialState = LegacyModule.SetState(
+                _initialState,
+                Addresses.GetSheetAddress<MaterialItemSheet>(),
+                _tableSheets.MaterialItemSheet.Serialize());
+            _initialState = LegacyModule.SetState(
+                _initialState,
+                Addresses.GetSheetAddress<ArenaSheet>(),
+                _tableSheets.ArenaSheet.Serialize());
+            _initialState = AgentModule.SetAgentState(
+                _initialState,
+                _sellerAgentAddress,
+                agentState);
+            _initialState = AvatarModule.SetAvatarState(
+                _initialState,
+                _sellerAvatarAddress,
+                _sellerAvatarState);
+            _initialState = AgentModule.SetAgentState(
+                _initialState,
+                _sellerAgentAddress2,
+                agentState2);
+            _initialState = AvatarModule.SetAvatarState(
+                _initialState,
+                _sellerAvatarAddress2,
+                _sellerAvatarState2);
+            _initialState = AgentModule.SetAgentState(
+                _initialState,
+                _buyerAgentAddress,
+                agentState3);
+            _initialState = AvatarModule.SetAvatarState(
+                _initialState,
+                _buyerAvatarAddress,
+                buyerAvatarState);
         }
 
         [Fact]
@@ -1161,7 +1191,7 @@ namespace Lib9c.Tests.Action.Scenario
                     new ActionContext
                     {
                         BlockIndex = 2L,
-                        PreviousState = new MockWorld(nextState),
+                        PreviousState = nextState,
                         Random = random,
                         Signer = _sellerAgentAddress,
                     }));

@@ -13,7 +13,7 @@ namespace Lib9c.DevExtensions.Tests.Action
 {
     public class FaucetCurrencyTest
     {
-        private readonly IAccount _initialState;
+        private readonly IWorld _initialState;
         private readonly Address _agentAddress;
         private readonly Currency _ncg;
         private readonly Currency _crystal;
@@ -30,18 +30,19 @@ namespace Lib9c.DevExtensions.Tests.Action
             _crystal = Currency.Legacy("CRYSTAL", 18, null);
 #pragma warning restore CS0618
 
-            _initialState = new MockAccount(
-                MockAccountState.Empty
-                    .AddBalance(GoldCurrencyState.Address, _ncg * int.MaxValue));
+            _initialState = new MockWorld(new MockAccount(
+                MockAccountState.Legacy
+                    .AddBalance(GoldCurrencyState.Address, _ncg * int.MaxValue)));
 
             var goldCurrencyState = new GoldCurrencyState(_ncg);
             _agentAddress = new PrivateKey().ToAddress();
             var agentState = new AgentState(_agentAddress);
 
-            _initialState = _initialState
-                    .SetState(_agentAddress, agentState.Serialize())
-                    .SetState(GoldCurrencyState.Address, goldCurrencyState.Serialize())
-                ;
+            _initialState = AgentModule.SetAgentState(_initialState, _agentAddress, agentState);
+            _initialState = LegacyModule.SetState(
+                _initialState,
+                GoldCurrencyState.Address,
+                goldCurrencyState.Serialize());
         }
 
         [Theory]
@@ -66,7 +67,7 @@ namespace Lib9c.DevExtensions.Tests.Action
             };
             var world = action
                 .Execute(
-                    new ActionContext { PreviousState = new MockWorld(_initialState) });
+                    new ActionContext { PreviousState = _initialState });
             AgentState agentState = AgentModule.GetAgentState(world, _agentAddress);
             FungibleAssetValue expectedNcgAsset =
                 new FungibleAssetValue(_ncg, expectedNcg, 0);

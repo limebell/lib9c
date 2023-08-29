@@ -44,7 +44,6 @@ namespace Lib9c.Tests.Action
         private readonly Address _rankingMapAddress;
 
         private readonly WeeklyArenaState _weeklyArenaState;
-        private readonly IAccount _initialAccount;
         private readonly IWorld _initialWorld;
 
         public HackAndSlash21Test()
@@ -80,20 +79,43 @@ namespace Lib9c.Tests.Action
             var currency = Currency.Legacy("NCG", 2, null);
 #pragma warning restore CS0618
             var goldCurrencyState = new GoldCurrencyState(currency);
-            _initialAccount = new MockAccount()
-                .SetState(Addresses.GoldCurrency, goldCurrencyState.Serialize())
-                .SetState(_weeklyArenaState.address, _weeklyArenaState.Serialize())
-                .SetState(_agentAddress, agentState.SerializeV2())
-                .SetState(_avatarAddress, _avatarState.SerializeV2())
-                .SetState(_inventoryAddress, _avatarState.inventory.Serialize())
-                .SetState(_worldInformationAddress, _avatarState.worldInformation.Serialize())
-                .SetState(_questListAddress, _avatarState.questList.Serialize())
-                .SetState(gameConfigState.address, gameConfigState.Serialize());
+            _initialWorld = new MockWorld();
+            _initialWorld = LegacyModule.SetState(
+                _initialWorld,
+                Addresses.GoldCurrency,
+                goldCurrencyState.Serialize());
+            _initialWorld = LegacyModule.SetState(
+                _initialWorld,
+                _weeklyArenaState.address,
+                _weeklyArenaState.Serialize());
+            _initialWorld = AgentModule.SetAgentStateV2(_initialWorld, _agentAddress, agentState);
+            _initialWorld = AvatarModule.SetAvatarStateV2(
+                _initialWorld,
+                _avatarAddress,
+                _avatarState);
+            _initialWorld = LegacyModule.SetState(
+                _initialWorld,
+                _inventoryAddress,
+                _avatarState.inventory.Serialize());
+            _initialWorld = LegacyModule.SetState(
+                _initialWorld,
+                _worldInformationAddress,
+                _avatarState.worldInformation.Serialize());
+            _initialWorld = LegacyModule.SetState(
+                _initialWorld,
+                _questListAddress,
+                _avatarState.questList.Serialize());
+            _initialWorld = LegacyModule.SetState(
+                _initialWorld,
+                gameConfigState.address,
+                gameConfigState.Serialize());
 
             foreach (var (key, value) in _sheets)
             {
-                _initialAccount = _initialAccount
-                    .SetState(Addresses.TableSheet.Derive(key), value.Serialize());
+                _initialWorld = LegacyModule.SetState(
+                    _initialWorld,
+                    Addresses.TableSheet.Derive(key),
+                    value.Serialize());
             }
 
             foreach (var address in _avatarState.combinationSlotAddresses)
@@ -101,10 +123,8 @@ namespace Lib9c.Tests.Action
                 var slotState = new CombinationSlotState(
                     address,
                     GameConfig.RequireClearedStageLevel.CombinationEquipmentAction);
-                _initialAccount = _initialAccount.SetState(address, slotState.Serialize());
+                _initialWorld = LegacyModule.SetState(_initialWorld, address, slotState.Serialize());
             }
-
-            _initialWorld = new MockWorld(_initialAccount);
         }
 
         [Theory]
@@ -176,21 +196,36 @@ namespace Lib9c.Tests.Action
                 previousAvatarState.Update(mail);
             }
 
-            IAccount state;
+            IWorld state;
             if (backward)
             {
-                state = _initialAccount.SetState(_avatarAddress, previousAvatarState.Serialize());
+                state = AvatarModule.SetAvatarState(
+                    _initialWorld,
+                    _avatarAddress,
+                    previousAvatarState);
             }
             else
             {
-                state = _initialAccount
-                    .SetState(_avatarAddress, previousAvatarState.SerializeV2())
-                    .SetState(_avatarAddress.Derive(LegacyInventoryKey), previousAvatarState.inventory.Serialize())
-                    .SetState(_avatarAddress.Derive(LegacyWorldInformationKey), previousAvatarState.worldInformation.Serialize())
-                    .SetState(_avatarAddress.Derive(LegacyQuestListKey), previousAvatarState.questList.Serialize());
+                state = AvatarModule.SetAvatarStateV2(
+                    _initialWorld,
+                    _avatarAddress,
+                    previousAvatarState);
+                state = LegacyModule.SetState(
+                    state,
+                    _avatarAddress.Derive(LegacyInventoryKey),
+                    previousAvatarState.inventory.Serialize());
+                state = LegacyModule.SetState(
+                    state,
+                    _avatarAddress.Derive(LegacyWorldInformationKey),
+                    previousAvatarState.worldInformation.Serialize());
+                state = LegacyModule.SetState(
+                    state,
+                    _avatarAddress.Derive(LegacyQuestListKey),
+                    previousAvatarState.questList.Serialize());
             }
 
-            state = state.SetState(
+            state = LegacyModule.SetState(
+                state,
                 _avatarAddress.Derive("world_ids"),
                 List.Empty.Add(worldId.Serialize())
             );
@@ -208,14 +243,12 @@ namespace Lib9c.Tests.Action
 
             var nextWorld = action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
                 Rehearsal = false,
                 BlockIndex = ActionObsoleteConfig.V100301ExecutedBlockIndex,
             });
-
-            var nextAccount = nextWorld.GetAccount(ReservedAddresses.LegacyAccount);
 
             var nextAvatarState = AvatarModule.GetAvatarStateV2(nextWorld, _avatarAddress);
 
@@ -228,10 +261,9 @@ namespace Lib9c.Tests.Action
         [InlineData(4, 200)]
         public void Execute_With_UpdateQuestList(int worldId, int stageId)
         {
-            var state = _initialAccount;
-            var world = _initialWorld;
+            var state = _initialWorld;
             // Remove stageId from WorldQuestSheet
-            var worldQuestSheet = LegacyModule.GetSheet<WorldQuestSheet>(world);
+            var worldQuestSheet = LegacyModule.GetSheet<WorldQuestSheet>(state);
             var targetRow = worldQuestSheet.OrderedList.FirstOrDefault(e => e.Goal == stageId);
             Assert.NotNull(targetRow);
             // Update new AvatarState
@@ -239,13 +271,13 @@ namespace Lib9c.Tests.Action
                 _avatarAddress,
                 _agentAddress,
                 0,
-                LegacyModule.GetAvatarSheets(world),
-                LegacyModule.GetGameConfigState(world),
+                LegacyModule.GetAvatarSheets(state),
+                LegacyModule.GetGameConfigState(state),
                 _rankingMapAddress)
             {
                 level = 400,
-                exp = LegacyModule.GetSheet<CharacterLevelSheet>(world).OrderedList.First(e => e.Level == 400).Exp,
-                worldInformation = new WorldInformation(0, LegacyModule.GetSheet<WorldSheet>(world), stageId),
+                exp = LegacyModule.GetSheet<CharacterLevelSheet>(state).OrderedList.First(e => e.Level == 400).Exp,
+                worldInformation = new WorldInformation(0, LegacyModule.GetSheet<WorldSheet>(state), stageId),
             };
             var equipments = Doomfist.GetAllParts(_tableSheets, avatarState.level);
             foreach (var equipment in equipments)
@@ -253,13 +285,19 @@ namespace Lib9c.Tests.Action
                 avatarState.inventory.AddItem(equipment);
             }
 
-            state = state
-                .SetState(avatarState.address, avatarState.SerializeV2())
-                .SetState(_inventoryAddress, avatarState.inventory.Serialize())
-                .SetState(_worldInformationAddress, avatarState.worldInformation.Serialize())
-                .SetState(_questListAddress, avatarState.questList.Serialize());
-
-            world = world.SetAccount(state);
+            state = AvatarModule.SetAvatarStateV2(state, avatarState.address, avatarState);
+            state = LegacyModule.SetState(
+                state,
+                _inventoryAddress,
+                avatarState.inventory.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                _worldInformationAddress,
+                avatarState.worldInformation.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                _questListAddress,
+                avatarState.questList.Serialize());
 
             Assert.Equal(400, avatarState.level);
             Assert.True(avatarState.worldInformation.IsWorldUnlocked(worldId));
@@ -282,26 +320,26 @@ namespace Lib9c.Tests.Action
                 AvatarAddress = avatarState.address,
             };
 
-            avatarState = AvatarModule.GetAvatarStateV2(world, avatarState.address);
+            avatarState = AvatarModule.GetAvatarStateV2(state, avatarState.address);
             avatarWorldQuests = avatarState.questList.OfType<WorldQuest>().ToList();
             Assert.DoesNotContain(avatarWorldQuests, e => e.Complete);
 
-            state = state.SetState(
+            state = LegacyModule.SetState(
+                state,
                 _avatarAddress.Derive("world_ids"),
                 List.Empty.Add(worldId.Serialize())
             );
 
             // Second Execute
-            state = action.Execute(new ActionContext
-            {
-                PreviousState = new MockWorld(state),
-                Signer = _agentAddress,
-                Random = new TestRandom(),
-            }).GetAccount(ReservedAddresses.LegacyAccount);
+            state = action.Execute(
+                new ActionContext
+                {
+                    PreviousState = state,
+                    Signer = _agentAddress,
+                    Random = new TestRandom(),
+                });
 
-            world = world.SetAccount(state);
-
-            avatarState = AvatarModule.GetAvatarStateV2(world, avatarState.address);
+            avatarState = AvatarModule.GetAvatarStateV2(state, avatarState.address);
             avatarWorldQuests = avatarState.questList.OfType<WorldQuest>().ToList();
             Assert.Equal(worldQuestSheet.Count, avatarWorldQuests.Count);
             Assert.Single(avatarWorldQuests, e => e.Goal == stageId && e.Complete);
@@ -344,7 +382,10 @@ namespace Lib9c.Tests.Action
                 _tableSheets.WorldSheet,
                 Math.Max(_tableSheets.StageSheet.First?.Id ?? 1, stageId));
 
-            var state = _initialAccount.SetState(_avatarAddress, previousAvatarState.SerializeV2());
+            var state = AvatarModule.SetAvatarStateV2(
+                _initialWorld,
+                _avatarAddress,
+                previousAvatarState);
 
             var action = new HackAndSlash
             {
@@ -359,7 +400,7 @@ namespace Lib9c.Tests.Action
 
             var nextWorld = action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
                 Rehearsal = false,
@@ -404,11 +445,8 @@ namespace Lib9c.Tests.Action
                 previousAvatarState.inventory.AddItem(equipment);
             }
 
-            var state = _initialAccount
-                .SetState(_avatarAddress, previousAvatarState.SerializeV2())
-                .SetState(_inventoryAddress, previousAvatarState.inventory.Serialize());
-
-            var world = _initialWorld.SetAccount(state);
+            var state = AvatarModule.SetAvatarStateV2(_initialWorld, _avatarAddress, previousAvatarState);
+            state = LegacyModule.SetState(state, _inventoryAddress, previousAvatarState.inventory.Serialize());
 
             var action = new HackAndSlash
             {
@@ -423,7 +461,7 @@ namespace Lib9c.Tests.Action
 
             var exec = Assert.Throws<DuplicateEquipmentException>(() => action.Execute(new ActionContext
             {
-                PreviousState = world,
+                PreviousState = state,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
                 Rehearsal = false,
@@ -448,19 +486,27 @@ namespace Lib9c.Tests.Action
                 AvatarAddress = _avatarAddress,
             };
 
-            IAccount state = backward ? new MockAccount() : _initialAccount;
+            IWorld state = backward ? new MockWorld() : _initialWorld;
             if (!backward)
             {
-                state = _initialAccount
-                    .SetState(_avatarAddress, _avatarState.SerializeV2())
-                    .SetState(_avatarAddress.Derive(LegacyInventoryKey), null!)
-                    .SetState(_avatarAddress.Derive(LegacyWorldInformationKey), null!)
-                    .SetState(_avatarAddress.Derive(LegacyQuestListKey), null!);
+                state = AvatarModule.SetAvatarStateV2(state, _avatarAddress, _avatarState);
+                state = LegacyModule.SetState(
+                    state,
+                    _avatarAddress.Derive(LegacyInventoryKey),
+                    null!);
+                state = LegacyModule.SetState(
+                    state,
+                    _avatarAddress.Derive(LegacyWorldInformationKey),
+                    null!);
+                state = LegacyModule.SetState(
+                    state,
+                    _avatarAddress.Derive(LegacyQuestListKey),
+                    null!);
             }
 
             var exec = Assert.Throws<FailedLoadStateException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
             }));
@@ -486,7 +532,7 @@ namespace Lib9c.Tests.Action
 
             var exec = Assert.Throws<SheetRowColumnException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(_initialAccount),
+                PreviousState = _initialWorld,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
             }));
@@ -508,12 +554,15 @@ namespace Lib9c.Tests.Action
                 AvatarAddress = _avatarAddress,
             };
 
-            var state = _initialAccount;
-            state = state.SetState(Addresses.TableSheet.Derive(nameof(StageSheet)), "test".Serialize());
+            var state = _initialWorld;
+            state = LegacyModule.SetState(
+                state,
+                Addresses.TableSheet.Derive(nameof(StageSheet)),
+                "test".Serialize());
 
             var exec = Assert.Throws<SheetRowNotFoundException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
             }));
@@ -535,20 +584,23 @@ namespace Lib9c.Tests.Action
                 AvatarAddress = _avatarAddress,
             };
 
-            var state = _initialAccount;
+            var state = _initialWorld;
             var worldSheet = new WorldSheet();
             worldSheet.Set("test");
             var avatarState = new AvatarState(_avatarState)
             {
                 worldInformation = new WorldInformation(0, worldSheet, false),
             };
-            state = state.SetState(_worldInformationAddress, avatarState.worldInformation.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                _worldInformationAddress,
+                avatarState.worldInformation.Serialize());
 
             Assert.False(avatarState.worldInformation.IsStageCleared(0));
 
             var exec = Assert.Throws<FailedAddWorldException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
             }));
@@ -575,10 +627,11 @@ namespace Lib9c.Tests.Action
                 AvatarAddress = _avatarAddress,
             };
 
-            IAccount state = _initialAccount;
+            IWorld state = _initialWorld;
             if (unlockedIdsExist)
             {
-                state = state.SetState(
+                state = LegacyModule.SetState(
+                    state,
                     _avatarAddress.Derive("world_ids"),
                     List.Empty.Add(worldId.Serialize())
                 );
@@ -586,7 +639,7 @@ namespace Lib9c.Tests.Action
 
             var exec = Assert.Throws<InvalidWorldException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
             }));
@@ -622,12 +675,12 @@ namespace Lib9c.Tests.Action
             Assert.True(world.IsStageCleared);
             Assert.True(avatarState.worldInformation.IsWorldUnlocked(1));
 
-            var state = _initialAccount;
-            state = state.SetState(_avatarAddress, avatarState.SerializeV2());
+            var state = _initialWorld;
+            state = AvatarModule.SetAvatarStateV2(state, _avatarAddress, avatarState);
 
             var exec = Assert.Throws<InvalidStageException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
             }));
@@ -654,7 +707,7 @@ namespace Lib9c.Tests.Action
 
             var exec = Assert.Throws<InvalidStageException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(_initialAccount),
+                PreviousState = _initialWorld,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
             }));
@@ -689,13 +742,15 @@ namespace Lib9c.Tests.Action
                 AvatarAddress = _avatarAddress,
             };
 
-            var state = _initialAccount
-                .SetState(_avatarAddress, avatarState.SerializeV2())
-                .SetState(_inventoryAddress, avatarState.inventory.Serialize());
+            var state = AvatarModule.SetAvatarStateV2(_initialWorld, _avatarAddress, avatarState);
+            state = LegacyModule.SetState(
+                state,
+                _inventoryAddress,
+                avatarState.inventory.Serialize());
 
             var exec = Assert.Throws<RequiredBlockIndexException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
             }));
@@ -711,17 +766,20 @@ namespace Lib9c.Tests.Action
         [InlineData(ItemSubType.Ring)]
         public void ExecuteThrowEquipmentSlotUnlockException(ItemSubType itemSubType)
         {
-            var state = _initialAccount;
+            var state = _initialWorld;
             var avatarState = new AvatarState(_avatarState)
             {
                 level = 0,
             };
-            state = state.SetState(_avatarAddress, avatarState.SerializeV2());
+            state = AvatarModule.SetAvatarStateV2(state, _avatarAddress, avatarState);
 
             var equipRow = _tableSheets.EquipmentItemSheet.Values.First(r => r.ItemSubType == itemSubType);
             var equipment = ItemFactory.CreateItemUsable(equipRow, Guid.NewGuid(), 0);
             avatarState.inventory.AddItem(equipment);
-            state = state.SetState(_inventoryAddress, avatarState.inventory.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                _inventoryAddress,
+                avatarState.inventory.Serialize());
 
             var action = new HackAndSlash
             {
@@ -739,7 +797,7 @@ namespace Lib9c.Tests.Action
 
             var exec = Assert.Throws<EquipmentSlotUnlockException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
             }));
@@ -770,12 +828,12 @@ namespace Lib9c.Tests.Action
                 TotalPlayCount = playCount,
             };
 
-            var state = _initialAccount;
-            state = state.SetState(_avatarAddress, avatarState.SerializeV2());
+            var state = _initialWorld;
+            state = AvatarModule.SetAvatarStateV2(state, _avatarAddress, avatarState);
 
             var exec = Assert.Throws<NotEnoughActionPointException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
             }));
@@ -814,17 +872,22 @@ namespace Lib9c.Tests.Action
                 previousAvatarState.Update(mail);
             }
 
-            IAccount state = _initialAccount
-                .SetState(_avatarAddress, previousAvatarState.SerializeV2())
-                .SetState(
-                    _avatarAddress.Derive(LegacyInventoryKey),
-                    previousAvatarState.inventory.Serialize())
-                .SetState(
-                    _avatarAddress.Derive(LegacyWorldInformationKey),
-                    previousAvatarState.worldInformation.Serialize())
-                .SetState(
-                    _avatarAddress.Derive(LegacyQuestListKey),
-                    previousAvatarState.questList.Serialize());
+            IWorld state = AvatarModule.SetAvatarStateV2(
+                _initialWorld,
+                _avatarAddress,
+                previousAvatarState);
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyInventoryKey),
+                previousAvatarState.inventory.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyWorldInformationKey),
+                previousAvatarState.worldInformation.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyQuestListKey),
+                previousAvatarState.questList.Serialize());
 
             var action = new HackAndSlash
             {
@@ -839,7 +902,7 @@ namespace Lib9c.Tests.Action
 
             var nextWorld = action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
                 Rehearsal = false,
@@ -867,7 +930,7 @@ namespace Lib9c.Tests.Action
                 level = avatarLevel,
             };
 
-            var state = _initialAccount;
+            var state = _initialWorld;
             var itemIds = new[] { GameConfig.DefaultAvatarWeaponId, 40100000 };
             foreach (var itemId in itemIds)
             {
@@ -891,10 +954,11 @@ namespace Lib9c.Tests.Action
                         costumes.Add(((INonFungibleItem)costume).NonFungibleId);
                     }
 
-                    state = state.SetState(avatarState.address, avatarState.SerializeV2())
-                        .SetState(
-                            avatarState.address.Derive(LegacyInventoryKey),
-                            avatarState.inventory.Serialize());
+                    state = AvatarModule.SetAvatarStateV2(state, avatarState.address, avatarState);
+                    state = LegacyModule.SetState(
+                        state,
+                        avatarState.address.Derive(LegacyInventoryKey),
+                        avatarState.inventory.Serialize());
 
                     var action = new HackAndSlash
                     {
@@ -909,7 +973,7 @@ namespace Lib9c.Tests.Action
 
                     var exec = Assert.Throws<NotEnoughAvatarLevelException>(() => action.Execute(new ActionContext
                     {
-                        PreviousState = new MockWorld(state),
+                        PreviousState = state,
                         Signer = avatarState.agentAddress,
                         Random = random,
                     }));
@@ -928,7 +992,7 @@ namespace Lib9c.Tests.Action
                 level = 1,
             };
 
-            var state = _initialAccount;
+            var state = _initialWorld;
             var action = new HackAndSlash
             {
                 Costumes = new List<Guid>(),
@@ -944,7 +1008,7 @@ namespace Lib9c.Tests.Action
 
             var exec = Assert.Throws<InvalidItemCountException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = avatarState.agentAddress,
                 Random = new TestRandom(),
             }));
@@ -965,7 +1029,7 @@ namespace Lib9c.Tests.Action
                 level = 1,
             };
 
-            var state = _initialAccount;
+            var state = _initialWorld;
             var action = new HackAndSlash
             {
                 Costumes = new List<Guid>(),
@@ -981,7 +1045,7 @@ namespace Lib9c.Tests.Action
 
             var exec = Assert.Throws<PlayCountIsZeroException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = avatarState.agentAddress,
                 Random = new TestRandom(),
             }));
@@ -992,7 +1056,7 @@ namespace Lib9c.Tests.Action
         [Fact]
         public void ExecuteThrowUsageLimitExceedException()
         {
-            var state = _initialAccount;
+            var state = _initialWorld;
             var action = new HackAndSlash
             {
                 Costumes = new List<Guid>(),
@@ -1008,7 +1072,7 @@ namespace Lib9c.Tests.Action
 
             var exec = Assert.Throws<UsageLimitExceedException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = _avatarState.agentAddress,
                 Random = new TestRandom(),
             }));
@@ -1019,7 +1083,7 @@ namespace Lib9c.Tests.Action
         [Fact]
         public void ExecuteThrowNotEnoughMaterialException()
         {
-            var state = _initialAccount;
+            var state = _initialWorld;
             var action = new HackAndSlash
             {
                 Costumes = new List<Guid>(),
@@ -1035,7 +1099,7 @@ namespace Lib9c.Tests.Action
 
             var exec = Assert.Throws<NotEnoughMaterialException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = _avatarState.agentAddress,
                 Random = new TestRandom(),
             }));
@@ -1103,27 +1167,33 @@ namespace Lib9c.Tests.Action
                 previousAvatarState.Update(mail);
             }
 
-            IAccount state;
+            IWorld state;
             if (backward)
             {
-                state = _initialAccount.SetState(_avatarAddress, previousAvatarState.Serialize());
+                state = AvatarModule.SetAvatarState(
+                    _initialWorld,
+                    _avatarAddress,
+                    previousAvatarState);
             }
             else
             {
-                state = _initialAccount
-                    .SetState(_avatarAddress, previousAvatarState.SerializeV2())
-                    .SetState(
-                        _avatarAddress.Derive(LegacyInventoryKey),
-                        previousAvatarState.inventory.Serialize())
-                    .SetState(
-                        _avatarAddress.Derive(LegacyWorldInformationKey),
-                        previousAvatarState.worldInformation.Serialize())
-                    .SetState(
-                        _avatarAddress.Derive(LegacyQuestListKey),
-                        previousAvatarState.questList.Serialize());
+                state = AvatarModule.SetAvatarStateV2(_initialWorld, _avatarAddress, previousAvatarState);
+                state = LegacyModule.SetState(
+                    state,
+                    _avatarAddress.Derive(LegacyInventoryKey),
+                    previousAvatarState.inventory.Serialize());
+                state = LegacyModule.SetState(
+                    state,
+                    _avatarAddress.Derive(LegacyWorldInformationKey),
+                    previousAvatarState.worldInformation.Serialize());
+                state = LegacyModule.SetState(
+                    state,
+                    _avatarAddress.Derive(LegacyQuestListKey),
+                    previousAvatarState.questList.Serialize());
             }
 
-            state = state.SetState(
+            state = LegacyModule.SetState(
+                state,
                 _avatarAddress.Derive("world_ids"),
                 Enumerable.Range(1, worldId).ToList().Select(i => i.Serialize()).Serialize()
             );
@@ -1141,7 +1211,7 @@ namespace Lib9c.Tests.Action
 
             var nextWorld = action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
                 Rehearsal = false,
@@ -1250,22 +1320,24 @@ namespace Lib9c.Tests.Action
                 previousAvatarState.Update(mail);
             }
 
-            var state = _initialAccount
-                .SetState(_avatarAddress, previousAvatarState.SerializeV2())
-                .SetState(
-                    _avatarAddress.Derive(LegacyInventoryKey),
-                    previousAvatarState.inventory.Serialize())
-                .SetState(
-                    _avatarAddress.Derive(LegacyWorldInformationKey),
-                    previousAvatarState.worldInformation.Serialize())
-                .SetState(
-                    _avatarAddress.Derive(LegacyQuestListKey),
-                    previousAvatarState.questList.Serialize());
+            var state = AvatarModule.SetAvatarStateV2(_initialWorld, _avatarAddress, previousAvatarState);
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyInventoryKey),
+                previousAvatarState.inventory.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyWorldInformationKey),
+                previousAvatarState.worldInformation.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyQuestListKey),
+                previousAvatarState.questList.Serialize());
 
-            state = state.SetState(
+            state = LegacyModule.SetState(
+                state,
                 _avatarAddress.Derive("world_ids"),
-                List.Empty.Add(worldId.Serialize())
-            );
+                List.Empty.Add(worldId.Serialize()));
 
             var skillStateAddress = Addresses.GetSkillStateAddressFromAvatarAddress(_avatarAddress);
             CrystalRandomSkillState skillState = null;
@@ -1279,7 +1351,7 @@ namespace Lib9c.Tests.Action
                         .Select(pair => pair.Value.Id).ToList());
                 }
 
-                state = state.SetState(skillStateAddress, skillState.Serialize());
+                state = LegacyModule.SetState(state, skillStateAddress, skillState.Serialize());
             }
 
             int? stageBuffId = null;
@@ -1312,7 +1384,7 @@ namespace Lib9c.Tests.Action
 
             var ctx = new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
                 Rehearsal = false,
@@ -1399,22 +1471,32 @@ namespace Lib9c.Tests.Action
             var requiredGold = _tableSheets.StakeRegularRewardSheet.OrderedRows
                 .FirstOrDefault(r => r.Level == level)?.RequiredGold ?? 0;
             var context = new ActionContext();
-            var state = _initialAccount
-                .SetState(_avatarAddress, previousAvatarState.SerializeV2())
-                .SetState(
-                    _avatarAddress.Derive(LegacyInventoryKey),
-                    previousAvatarState.inventory.Serialize())
-                .SetState(
-                    _avatarAddress.Derive(LegacyWorldInformationKey),
-                    previousAvatarState.worldInformation.Serialize())
-                .SetState(
-                    _avatarAddress.Derive(LegacyQuestListKey),
-                    previousAvatarState.questList.Serialize())
-                .SetState(stakeStateAddress, stakeState.SerializeV2())
-                .SetState(
-                    _avatarAddress.Derive("world_ids"),
-                    List.Empty.Add(worldId.Serialize()))
-                .MintAsset(context, stakeStateAddress, requiredGold * LegacyModule.GetGoldCurrency(_initialWorld));
+            var state = AvatarModule.SetAvatarStateV2(
+                _initialWorld,
+                _avatarAddress,
+                previousAvatarState);
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyInventoryKey),
+                previousAvatarState.inventory.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyWorldInformationKey),
+                previousAvatarState.worldInformation.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyQuestListKey),
+                previousAvatarState.questList.Serialize());
+            state = LegacyModule.SetState(state, stakeStateAddress, stakeState.SerializeV2());
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive("world_ids"),
+                List.Empty.Add(worldId.Serialize()));
+            state = LegacyModule.MintAsset(
+                state,
+                context,
+                stakeStateAddress,
+                requiredGold * LegacyModule.GetGoldCurrency(_initialWorld));
 
             var expectedAp = previousAvatarState.actionPoint -
                              _tableSheets.StakeActionPointCoefficientSheet.GetActionPointByStaking(
@@ -1434,7 +1516,7 @@ namespace Lib9c.Tests.Action
 
             var ctx = new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
                 Rehearsal = false,
@@ -1478,22 +1560,32 @@ namespace Lib9c.Tests.Action
             var requiredGold = _tableSheets.StakeRegularRewardSheet.OrderedRows
                 .FirstOrDefault(r => r.Level == level)?.RequiredGold ?? 0;
             var context = new ActionContext();
-            var state = _initialAccount
-                .SetState(_avatarAddress, previousAvatarState.SerializeV2())
-                .SetState(
-                    _avatarAddress.Derive(LegacyInventoryKey),
-                    previousAvatarState.inventory.Serialize())
-                .SetState(
-                    _avatarAddress.Derive(LegacyWorldInformationKey),
-                    previousAvatarState.worldInformation.Serialize())
-                .SetState(
-                    _avatarAddress.Derive(LegacyQuestListKey),
-                    previousAvatarState.questList.Serialize())
-                .SetState(stakeStateAddress, stakeState.SerializeV2())
-                .SetState(
-                    _avatarAddress.Derive("world_ids"),
-                    List.Empty.Add(worldId.Serialize()))
-                .MintAsset(context, stakeStateAddress, requiredGold * LegacyModule.GetGoldCurrency(_initialWorld));
+            var state = AvatarModule.SetAvatarStateV2(
+                _initialWorld,
+                _avatarAddress,
+                previousAvatarState);
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyInventoryKey),
+                previousAvatarState.inventory.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyWorldInformationKey),
+                previousAvatarState.worldInformation.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyQuestListKey),
+                previousAvatarState.questList.Serialize());
+            state = LegacyModule.SetState(state, stakeStateAddress, stakeState.SerializeV2());
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive("world_ids"),
+                List.Empty.Add(worldId.Serialize()));
+            state = LegacyModule.MintAsset(
+                state,
+                context,
+                stakeStateAddress,
+                requiredGold * LegacyModule.GetGoldCurrency(_initialWorld));
 
             var itemCount = previousAvatarState.inventory.Items
                 .FirstOrDefault(i => i.item.Id == itemId)?.count ?? 0;
@@ -1514,7 +1606,7 @@ namespace Lib9c.Tests.Action
 
             var ctx = new ActionContext
             {
-                PreviousState = _initialWorld.SetAccount(state),
+                PreviousState = state,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
                 Rehearsal = false,
@@ -1540,17 +1632,19 @@ namespace Lib9c.Tests.Action
                 r.ItemSubType == ItemSubType.ApStone);
             var apStone = ItemFactory.CreateTradableMaterial(apStoneRow);
             avatarState.inventory.AddItem(apStone);
-            var state = _initialAccount
-                .SetState(_avatarAddress, avatarState.SerializeV2())
-                .SetState(
-                    _avatarAddress.Derive(LegacyInventoryKey),
-                    avatarState.inventory.Serialize())
-                .SetState(
-                    _avatarAddress.Derive(LegacyWorldInformationKey),
-                    avatarState.worldInformation.Serialize())
-                .SetState(
-                    _avatarAddress.Derive(LegacyQuestListKey),
-                    avatarState.questList.Serialize());
+            var state = AvatarModule.SetAvatarStateV2(_initialWorld, _avatarAddress, avatarState);
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyInventoryKey),
+                avatarState.inventory.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyWorldInformationKey),
+                avatarState.worldInformation.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyQuestListKey),
+                avatarState.questList.Serialize());
             var action = new HackAndSlash
             {
                 Costumes = new List<Guid>(),
@@ -1566,7 +1660,7 @@ namespace Lib9c.Tests.Action
 
             var exec = Assert.Throws<InvalidRepeatPlayException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = avatarState.agentAddress,
                 Random = new TestRandom(),
             }));
@@ -1633,13 +1727,25 @@ namespace Lib9c.Tests.Action
                 previousAvatarState.Update(mail);
             }
 
-            var state = _initialAccount
-                .SetState(_avatarAddress, previousAvatarState.SerializeV2())
-                .SetState(_avatarAddress.Derive(LegacyInventoryKey), previousAvatarState.inventory.Serialize())
-                .SetState(_avatarAddress.Derive(LegacyWorldInformationKey), previousAvatarState.worldInformation.Serialize())
-                .SetState(_avatarAddress.Derive(LegacyQuestListKey), previousAvatarState.questList.Serialize());
+            var state = AvatarModule.SetAvatarStateV2(
+                _initialWorld,
+                _avatarAddress,
+                previousAvatarState);
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyInventoryKey),
+                previousAvatarState.inventory.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyWorldInformationKey),
+                previousAvatarState.worldInformation.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyQuestListKey),
+                previousAvatarState.questList.Serialize());
 
-            state = state.SetState(
+            state = LegacyModule.SetState(
+                state,
                 _avatarAddress.Derive("world_ids"),
                 List.Empty.Add(worldId.Serialize())
             );
@@ -1659,14 +1765,15 @@ namespace Lib9c.Tests.Action
                 AvatarAddress = _avatarAddress,
             };
 
-            var nextState = action.Execute(new ActionContext
-            {
-                PreviousState = new MockWorld(state),
-                Signer = _agentAddress,
-                Random = new TestRandom(),
-                Rehearsal = false,
-                BlockIndex = ActionObsoleteConfig.V100301ExecutedBlockIndex,
-            }).GetAccount(ReservedAddresses.LegacyAccount);
+            var nextState = action.Execute(
+                new ActionContext
+                {
+                    PreviousState = state,
+                    Signer = _agentAddress,
+                    Random = new TestRandom(),
+                    Rehearsal = false,
+                    BlockIndex = ActionObsoleteConfig.V100301ExecutedBlockIndex,
+                });
 
             var action2 = new HackAndSlash
             {
@@ -1685,7 +1792,7 @@ namespace Lib9c.Tests.Action
 
             action2.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(nextState),
+                PreviousState = nextState,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
                 Rehearsal = false,
@@ -1755,21 +1862,28 @@ namespace Lib9c.Tests.Action
             }
 
             var context = new ActionContext();
-            var state = _initialAccount
-                .SetState(_avatarAddress, previousAvatarState.SerializeV2())
-                .SetState(_avatarAddress.Derive(LegacyInventoryKey), previousAvatarState.inventory.Serialize())
-                .SetState(_avatarAddress.Derive(LegacyWorldInformationKey), previousAvatarState.worldInformation.Serialize())
-                .SetState(_avatarAddress.Derive(LegacyQuestListKey), previousAvatarState.questList.Serialize());
+            var state = AvatarModule.SetAvatarStateV2(
+                _initialWorld,
+                _avatarAddress,
+                previousAvatarState);
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyInventoryKey),
+                previousAvatarState.inventory.Serialize());
+            state = LegacyModule.SetState(
+                state,
+                _avatarAddress.Derive(LegacyWorldInformationKey),
+                previousAvatarState.worldInformation.Serialize());
+            state = LegacyModule.SetState(state, _avatarAddress.Derive(LegacyQuestListKey), previousAvatarState.questList.Serialize());
 
-            state = state.SetState(
+            state = LegacyModule.SetState(
+                state,
                 _avatarAddress.Derive("world_ids"),
                 List.Empty.Add(worldId.Serialize())
             );
 
-            var world = _initialWorld.SetAccount(state);
-
-            var ncgCurrency = LegacyModule.GetGoldCurrency(world);
-            state = state.MintAsset(context, _agentAddress, 99999 * ncgCurrency);
+            var ncgCurrency = LegacyModule.GetGoldCurrency(state);
+            state = LegacyModule.MintAsset(state, context, _agentAddress, 99999 * ncgCurrency);
 
             var unlockRuneSlot = new UnlockRuneSlot()
             {
@@ -1777,14 +1891,14 @@ namespace Lib9c.Tests.Action
                 SlotIndex = 1,
             };
 
-            state = unlockRuneSlot.Execute(new ActionContext
-            {
-                BlockIndex = 1,
-                PreviousState = new MockWorld(state),
-                Signer = _agentAddress,
-                Random = new TestRandom(),
-            }).GetAccount(ReservedAddresses.LegacyAccount);
-
+            state = unlockRuneSlot.Execute(
+                new ActionContext
+                {
+                    BlockIndex = 1,
+                    PreviousState = state,
+                    Signer = _agentAddress,
+                    Random = new TestRandom(),
+                });
             var action = new HackAndSlash
             {
                 Costumes = costumes,
@@ -1802,7 +1916,7 @@ namespace Lib9c.Tests.Action
 
             Assert.Throws(exception, () => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(state),
+                PreviousState = state,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
             }));

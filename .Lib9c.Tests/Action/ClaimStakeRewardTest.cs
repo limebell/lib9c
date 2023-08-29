@@ -179,7 +179,7 @@ namespace Lib9c.Tests.Action
             long expectedCurrencyAmount)
         {
             Execute(
-                new MockWorld(_initialStatesWithAvatarStateV1),
+                _initialStatesWithAvatarStateV1,
                 _agentAddr,
                 _avatarAddr,
                 startedBlockIndex,
@@ -194,7 +194,7 @@ namespace Lib9c.Tests.Action
                 expectedCurrencyAmount);
 
             Execute(
-                new MockWorld(_initialStatesWithAvatarStateV2),
+                _initialStatesWithAvatarStateV2,
                 _agentAddr,
                 _avatarAddr,
                 startedBlockIndex,

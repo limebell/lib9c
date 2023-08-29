@@ -14,13 +14,14 @@ namespace Lib9c.Tests.Action
     using Nekoyume.Model.Exceptions;
     using Nekoyume.Model.Market;
     using Nekoyume.Model.State;
+    using Nekoyume.Module;
     using Serilog;
     using Xunit;
     using Xunit.Abstractions;
 
     public class CancelProductRegistrationTest
     {
-        private readonly IAccount _initialState;
+        private readonly IWorld _initialState;
         private readonly Address _agentAddress;
         private readonly Address _avatarAddress;
         private readonly GoldCurrencyState _goldCurrencyState;
@@ -34,12 +35,14 @@ namespace Lib9c.Tests.Action
                 .WriteTo.TestOutput(outputHelper)
                 .CreateLogger();
 
-            _initialState = new MockAccount();
+            _initialState = new MockWorld();
             var sheets = TableSheetsImporter.ImportSheets();
             foreach (var (key, value) in sheets)
             {
-                _initialState = _initialState
-                    .SetState(Addresses.TableSheet.Derive(key), value.Serialize());
+                _initialState = LegacyModule.SetState(
+                    _initialState,
+                    Addresses.TableSheet.Derive(key),
+                    value.Serialize());
             }
 
             _tableSheets = new TableSheets(sheets);
@@ -70,11 +73,16 @@ namespace Lib9c.Tests.Action
             };
             agentState.avatarAddresses[0] = _avatarAddress;
 
-            _initialState = _initialState
-                .SetState(GoldCurrencyState.Address, _goldCurrencyState.Serialize())
-                .SetState(_agentAddress, agentState.Serialize())
-                .SetState(Addresses.Shop, new ShopState().Serialize())
-                .SetState(_avatarAddress, avatarState.Serialize());
+            _initialState = LegacyModule.SetState(
+                _initialState,
+                GoldCurrencyState.Address,
+                _goldCurrencyState.Serialize());
+            _initialState = AgentModule.SetAgentState(_initialState, _agentAddress, agentState);
+            _initialState = LegacyModule.SetState(
+                _initialState,
+                Addresses.Shop,
+                new ShopState().Serialize());
+            _initialState = AvatarModule.SetAvatarState(_initialState, _avatarAddress, avatarState);
         }
 
         [Theory]
@@ -119,7 +127,7 @@ namespace Lib9c.Tests.Action
             {
                 Signer = _agentAddress,
                 BlockIndex = 1L,
-                PreviousState = new MockWorld(_initialState),
+                PreviousState = _initialState,
                 Random = new TestRandom(),
             };
             Assert.Throws<InvalidAddressException>(() => action.Execute(actionContext));
@@ -129,7 +137,11 @@ namespace Lib9c.Tests.Action
         public void Execute_Throw_ProductNotFoundException()
         {
             var context = new ActionContext();
-            var prevState = _initialState.MintAsset(context, _avatarAddress, 1 * RuneHelper.StakeRune);
+            var prevState = LegacyModule.MintAsset(
+                _initialState,
+                context,
+                _avatarAddress,
+                1 * RuneHelper.StakeRune);
             var registerProduct = new RegisterProduct
             {
                 AvatarAddress = _avatarAddress,
@@ -146,19 +158,18 @@ namespace Lib9c.Tests.Action
             };
             var nextWorld = registerProduct.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(prevState),
+                PreviousState = prevState,
                 BlockIndex = 1L,
                 Signer = _agentAddress,
                 Random = new TestRandom(),
             });
-            var nextState = nextWorld.GetAccount(ReservedAddresses.LegacyAccount);
             Assert.Equal(
                 0 * RuneHelper.StakeRune,
-                nextState.GetBalance(_avatarAddress, RuneHelper.StakeRune)
+                LegacyModule.GetBalance(nextWorld, _avatarAddress, RuneHelper.StakeRune)
             );
             var productsState =
                 new ProductsState(
-                    (List)nextState.GetState(ProductsState.DeriveAddress(_avatarAddress)));
+                    (List)LegacyModule.GetState(nextWorld, ProductsState.DeriveAddress(_avatarAddress)));
             var productId = Assert.Single(productsState.ProductIds);
 
             var action = new CancelProductRegistration
@@ -187,7 +198,7 @@ namespace Lib9c.Tests.Action
 
             Assert.Throws<ProductNotFoundException>(() => action.Execute(new ActionContext
             {
-                PreviousState = new MockWorld(nextState),
+                PreviousState = nextWorld,
                 BlockIndex = 2L,
                 Signer = _agentAddress,
                 Random = new TestRandom(),

@@ -5,14 +5,12 @@ namespace Lib9c.Tests.Action
     using System.Globalization;
     using System.Linq;
     using Bencodex.Types;
-    using Libplanet.Action;
     using Libplanet.Action.State;
     using Libplanet.Crypto;
     using Libplanet.Types.Assets;
     using Nekoyume;
     using Nekoyume.Action;
     using Nekoyume.Action.Extensions;
-    using Nekoyume.Action.Results;
     using Nekoyume.Extensions;
     using Nekoyume.Helper;
     using Nekoyume.Model.Item;
@@ -29,7 +27,7 @@ namespace Lib9c.Tests.Action
         private readonly Address _avatarAddress;
         private readonly AvatarState _avatarState;
         private readonly Currency _currency;
-        private IAccount _initialState;
+        private IWorld _initialState;
 
         public ItemEnhancementTest()
         {
@@ -59,20 +57,45 @@ namespace Lib9c.Tests.Action
             var slotAddress = _avatarAddress.Derive(string.Format(CultureInfo.InvariantCulture, CombinationSlotState.DeriveFormat, 0));
 
             var context = new ActionContext();
-            _initialState = new MockAccount()
-                .SetState(_agentAddress, agentState.Serialize())
-                .SetState(_avatarAddress, _avatarState.Serialize())
-                .SetState(slotAddress, new CombinationSlotState(slotAddress, 0).Serialize())
-                .SetState(GoldCurrencyState.Address, gold.Serialize())
-                .MintAsset(context, GoldCurrencyState.Address, gold.Currency * 100000000000)
-                .TransferAsset(context, Addresses.GoldCurrency, _agentAddress, gold.Currency * 1000);
+            _initialState = new MockWorld();
+            _initialState = AgentModule.SetAgentState(_initialState, _agentAddress, agentState);
+            _initialState = AvatarModule.SetAvatarState(
+                _initialState,
+                _avatarAddress,
+                _avatarState);
+            _initialState = LegacyModule.SetState(
+                _initialState,
+                slotAddress,
+                new CombinationSlotState(slotAddress, 0).Serialize());
+            _initialState = LegacyModule.SetState(
+                _initialState,
+                GoldCurrencyState.Address,
+                gold.Serialize());
+            _initialState = LegacyModule.MintAsset(
+                _initialState,
+                context,
+                GoldCurrencyState.Address,
+                gold.Currency * 100000000000);
+            _initialState = LegacyModule.TransferAsset(
+                _initialState,
+                context,
+                Addresses.GoldCurrency,
+                _agentAddress,
+                gold.Currency * 1000);
 
-            Assert.Equal(gold.Currency * 99999999000, _initialState.GetBalance(Addresses.GoldCurrency, gold.Currency));
-            Assert.Equal(gold.Currency * 1000, _initialState.GetBalance(_agentAddress, gold.Currency));
+            Assert.Equal(
+                gold.Currency * 99999999000,
+                LegacyModule.GetBalance(_initialState, Addresses.GoldCurrency, gold.Currency));
+            Assert.Equal(
+                gold.Currency * 1000,
+                LegacyModule.GetBalance(_initialState, _agentAddress, gold.Currency));
 
             foreach (var (key, value) in sheets)
             {
-                _initialState = _initialState.SetState(Addresses.TableSheet.Derive(key), value.Serialize());
+                _initialState = LegacyModule.SetState(
+                    _initialState,
+                    Addresses.TableSheet.Derive(key),
+                    value.Serialize());
             }
         }
 
@@ -134,15 +157,29 @@ namespace Lib9c.Tests.Action
 
             if (backward)
             {
-                _initialState = _initialState.SetState(_avatarAddress, _avatarState.Serialize());
+                _initialState = AvatarModule.SetAvatarState(
+                    _initialState,
+                    _avatarAddress,
+                    _avatarState);
             }
             else
             {
-                _initialState = _initialState
-                    .SetState(_avatarAddress.Derive(LegacyInventoryKey), _avatarState.inventory.Serialize())
-                    .SetState(_avatarAddress.Derive(LegacyWorldInformationKey), _avatarState.worldInformation.Serialize())
-                    .SetState(_avatarAddress.Derive(LegacyQuestListKey), _avatarState.questList.Serialize())
-                    .SetState(_avatarAddress, _avatarState.SerializeV2());
+                _initialState = LegacyModule.SetState(
+                    _initialState,
+                    _avatarAddress.Derive(LegacyInventoryKey),
+                    _avatarState.inventory.Serialize());
+                _initialState = LegacyModule.SetState(
+                    _initialState,
+                    _avatarAddress.Derive(LegacyWorldInformationKey),
+                    _avatarState.worldInformation.Serialize());
+                _initialState = LegacyModule.SetState(
+                    _initialState,
+                    _avatarAddress.Derive(LegacyQuestListKey),
+                    _avatarState.questList.Serialize());
+                _initialState = AvatarModule.SetAvatarStateV2(
+                    _initialState,
+                    _avatarAddress,
+                    _avatarState);
             }
 
             if (monsterCollectLevel > 0)
@@ -154,18 +191,29 @@ namespace Lib9c.Tests.Action
                     // StakeState;
                     var stakeStateAddress = StakeState.DeriveAddress(_agentAddress);
                     var stakeState = new StakeState(stakeStateAddress, 1);
-                    _initialState = _initialState
-                            .SetState(stakeStateAddress, stakeState.SerializeV2())
-                            .MintAsset(context, stakeStateAddress, requiredGold * _currency);
+                    _initialState = LegacyModule.SetState(
+                        _initialState,
+                        stakeStateAddress,
+                        stakeState.SerializeV2());
+                    _initialState = LegacyModule.MintAsset(
+                        _initialState,
+                        context,
+                        stakeStateAddress,
+                        requiredGold * _currency);
                 }
                 else
                 {
                     var mcAddress = MonsterCollectionState.DeriveAddress(_agentAddress, 0);
-                    _initialState = _initialState.SetState(
+                    _initialState = LegacyModule.SetState(
+                        _initialState,
                         mcAddress,
                         new MonsterCollectionState(mcAddress, monsterCollectLevel, 0).Serialize()
-                    )
-                        .MintAsset(context, mcAddress, requiredGold * _currency);
+                    );
+                    _initialState = LegacyModule.MintAsset(
+                        _initialState,
+                        context,
+                        mcAddress,
+                        requiredGold * _currency);
                 }
             }
 
@@ -179,7 +227,7 @@ namespace Lib9c.Tests.Action
 
             var nextWorld = action.Execute(new ActionContext()
             {
-                PreviousState = new MockWorld(_initialState),
+                PreviousState = _initialState,
                 Signer = _agentAddress,
                 BlockIndex = 1,
                 Random = new TestRandom(randomSeed),

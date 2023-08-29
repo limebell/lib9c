@@ -179,7 +179,7 @@ namespace Lib9c.Tests.Action.Scenario.Pet
             stateV2 = rapidAction.Execute(
                 new ActionContext
                 {
-                    PreviousState = new MockWorld(stateV2),
+                    PreviousState = stateV2,
                     Signer = _agentAddr,
                     BlockIndex = LegacyModule.GetGameConfigState(stateV2).RequiredAppraiseBlock,
                     Random = random,

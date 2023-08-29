@@ -16,7 +16,6 @@ namespace Lib9c.Tests.Action.Scenario.Pet
     using Nekoyume.Module;
     using Nekoyume.TableData;
     using Xunit;
-    using Xunit.Abstractions;
     using static Lib9c.SerializeKeys;
 
     public class AdditionalOptionRateByFixedValueTest
@@ -130,7 +129,7 @@ namespace Lib9c.Tests.Action.Scenario.Pet
             stateV2 = action.Execute(
                 new ActionContext
                 {
-                    PreviousState = new MockWorld(stateV2),
+                    PreviousState = stateV2,
                     Signer = _agentAddr,
                     BlockIndex = 0L,
                     Random = random,

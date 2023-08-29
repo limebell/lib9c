@@ -23,7 +23,6 @@ namespace Lib9c.Tests.Action
 
     public class ArenaHelperTest
     {
-        private IAccount _account;
         private IWorld _world;
         private Currency _crystal;
         private Address _agent1Address;
@@ -37,13 +36,13 @@ namespace Lib9c.Tests.Action
                 .WriteTo.TestOutput(outputHelper)
                 .CreateLogger();
 
-            _account = new MockAccount();
+            _world = new MockWorld();
 
             var sheets = TableSheetsImporter.ImportSheets();
             var tableSheets = new TableSheets(sheets);
             foreach (var (key, value) in sheets)
             {
-                _account = _account.SetState(Addresses.TableSheet.Derive(key), value.Serialize());
+                _world = LegacyModule.SetState(_world, Addresses.TableSheet.Derive(key), value.Serialize());
             }
 
             tableSheets = new TableSheets(sheets);
@@ -71,16 +70,29 @@ namespace Lib9c.Tests.Action
             _avatar1 = avatar1State;
             _avatar1Address = avatar1State.address;
 
-            _account = _account
-                .SetState(Addresses.GoldCurrency, goldCurrencyState.Serialize())
-                .SetState(_agent1Address, agent1State.Serialize())
-                .SetState(_avatar1Address.Derive(LegacyInventoryKey), _avatar1.inventory.Serialize())
-                .SetState(_avatar1Address.Derive(LegacyWorldInformationKey), _avatar1.worldInformation.Serialize())
-                .SetState(_avatar1Address.Derive(LegacyQuestListKey), _avatar1.questList.Serialize())
-                .SetState(_avatar1Address, _avatar1.Serialize())
-                .SetState(Addresses.GameConfig, new GameConfigState(sheets[nameof(GameConfigSheet)]).Serialize());
+            _world = LegacyModule.SetState(
+                _world,
+                Addresses.GoldCurrency,
+                goldCurrencyState.Serialize());
+            _world = AgentModule.SetAgentState(_world, _agent1Address, agent1State);
+            _world = LegacyModule.SetState(
+                _world,
+                _avatar1Address.Derive(LegacyInventoryKey),
+                _avatar1.inventory.Serialize());
+            _world = LegacyModule.SetState(
+                _world,
+                _avatar1Address.Derive(LegacyWorldInformationKey),
+                _avatar1.worldInformation.Serialize());
+            _world = LegacyModule.SetState(
+                _world,
+                _avatar1Address.Derive(LegacyQuestListKey),
+                _avatar1.questList.Serialize());
+            _world = AvatarModule.SetAvatarState(_world, _avatar1Address, _avatar1);
+            _world = LegacyModule.SetState(
+                _world,
+                Addresses.GameConfig,
+                new GameConfigState(sheets[nameof(GameConfigSheet)]).Serialize());
 
-            _world = new MockWorld(_account);
             Log.Logger = new LoggerConfiguration()
                 .MinimumLevel.Verbose()
                 .WriteTo.TestOutput(outputHelper)

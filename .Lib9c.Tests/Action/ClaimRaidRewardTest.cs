@@ -8,21 +8,25 @@ namespace Lib9c.Tests.Action
     using Nekoyume.Action;
     using Nekoyume.Helper;
     using Nekoyume.Model.State;
+    using Nekoyume.Module;
     using Xunit;
 
     public class ClaimRaidRewardTest
     {
         private readonly TableSheets _tableSheets;
-        private readonly IAccount _state;
+        private readonly IWorld _state;
 
         public ClaimRaidRewardTest()
         {
             var tableCsv = TableSheetsImporter.ImportSheets();
             _tableSheets = new TableSheets(tableCsv);
-            _state = new MockAccount();
+            _state = new MockWorld();
             foreach (var kv in tableCsv)
             {
-                _state = _state.SetState(Addresses.GetSheetAddress(kv.Key), kv.Value.Serialize());
+                _state = LegacyModule.SetState(
+                    _state,
+                    Addresses.GetSheetAddress(kv.Key),
+                    kv.Value.Serialize());
             }
         }
 
@@ -62,7 +66,7 @@ namespace Lib9c.Tests.Action
                 HighScore = highScore,
                 LatestRewardRank = latestRank,
             };
-            IAccount state = _state.SetState(raiderAddress, raiderState.Serialize());
+            IWorld state = LegacyModule.SetState(_state, raiderAddress, raiderState.Serialize());
             var randomSeed = 0;
 
             var rows = _tableSheets.WorldBossRankRewardSheet.Values
@@ -89,7 +93,7 @@ namespace Lib9c.Tests.Action
                     Signer = agentAddress,
                     BlockIndex = 5055201L,
                     Random = new TestRandom(randomSeed),
-                    PreviousState = new MockWorld(state),
+                    PreviousState = state,
                 });
                 var nextState = nextWorld.GetAccount(ReservedAddresses.LegacyAccount);
 
@@ -117,7 +121,7 @@ namespace Lib9c.Tests.Action
                     Signer = default,
                     BlockIndex = 5055201L,
                     Random = new TestRandom(randomSeed),
-                    PreviousState = new MockWorld(state),
+                    PreviousState = state,
                 }));
             }
         }
