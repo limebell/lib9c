@@ -271,7 +271,7 @@ namespace Lib9c.Tests.Action
             var state = LegacyModule.SetState(
                 _initialWorld,
                 _avatarAddress.Derive("world_ids"),
-                List.Empty.Add(1.Serialize()));
+                List.Empty.Add(worldId.Serialize()));
 
             Assert.Throws<SheetRowNotFoundException>(() => action.Execute(new ActionContext()
             {
