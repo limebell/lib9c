@@ -1,6 +1,7 @@
 ﻿using Bencodex.Types;
 using Libplanet.Action;
 using Libplanet.Action.State;
+using Libplanet.Types.Assets;
 using Nekoyume.Action.DPoS.Misc;
 using Nekoyume.Module;
 
@@ -42,10 +43,14 @@ namespace Nekoyume.Action.DPoS.Sys
                 return world;
             }
 
+            // Should return used gas to Faucet,
+            // and transfer NCG from community pool instead of mint.
+            var usedGasFee = realGasPrice * context.GasUsed();
+            var reward = FungibleAssetValue.FromRawValue(Asset.GovernanceToken, usedGasFee.RawValue);
             return world.MintAsset(
                 context,
                 ReservedAddress.RewardPool,
-                realGasPrice * context.GasUsed());
+                reward);
         }
     }
 }

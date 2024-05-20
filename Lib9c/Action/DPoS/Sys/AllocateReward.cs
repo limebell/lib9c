@@ -5,6 +5,7 @@ using Libplanet.Action.State;
 using Nekoyume.Action.DPoS.Control;
 using Nekoyume.Action.DPoS.Misc;
 using Nekoyume.Action.DPoS.Model;
+using Serilog;
 
 namespace Nekoyume.Action.DPoS.Sys
 {
@@ -33,17 +34,21 @@ namespace Nekoyume.Action.DPoS.Sys
         /// <inheritdoc cref="IAction.Execute(IActionContext)"/>
         public override IWorld Execute(IActionContext context)
         {
+            Log.Debug("[AllocateReward #{Index}] AllocateReward exec", context.BlockIndex);
             var states = context.PreviousState;
+            var blockReward = states.GetBalance(
+                ReservedAddress.RewardPool, nativeToken);
             var nativeTokens = ImmutableHashSet.Create(
                 Asset.GovernanceToken, Asset.ConsensusToken, Asset.Share);
-            var previousProposerInfo =
-                new ProposerInfo(states.GetDPoSState(ReservedAddress.ProposerInfo));
-            states = AllocateRewardCtrl.Execute(
-                states,
-                context,
-                nativeTokens,
-                context.LastCommit?.Votes,
-                previousProposerInfo);
+            if (states.GetDPoSState(ReservedAddress.ProposerInfo) is { } proposerInfoState)
+            {
+                states = AllocateRewardCtrl.Execute(
+                    states,
+                    context,
+                    nativeTokens,
+                    context.LastCommit?.Votes,
+                    new ProposerInfo(proposerInfoState));
+            };
 
             return states;
         }
