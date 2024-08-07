@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
 using Bencodex.Types;
 using Lib9c;
 using Libplanet.Action;
@@ -17,6 +18,8 @@ namespace Nekoyume.Action.DPoS.Sys
     /// </summary>
     public sealed class AllocateReward : ActionBase
     {
+        private readonly ActivitySource ActivitySource = new ActivitySource("Lib9c.Action.AllocateReward");
+
         /// <summary>
         /// Creates a new instance of <see cref="AllocateReward"/>.
         /// </summary>
@@ -37,18 +40,28 @@ namespace Nekoyume.Action.DPoS.Sys
         public override IWorld Execute(IActionContext context)
         {
             var states = context.PreviousState;
+            using var allocateRewardActivity = ActivitySource.StartActivity("AllocateReward");
+            using var getNativeTokensActivity = ActivitySource.StartActivity("GetNativeTokens");
             var nativeTokens = states.GetNativeTokens();
+            getNativeTokensActivity?.Dispose();
 
-            if (states.GetDPoSState(ReservedAddress.ProposerInfo) is { } proposerInfoState)
+            using var getProposerInfoActivity = ActivitySource.StartActivity("GetProposerInfo");
+            var nullableProposerInfoState = states.GetDPoSState(ReservedAddress.ProposerInfo);
+            getProposerInfoActivity?.Dispose();
+            if (nullableProposerInfoState is { } proposerInfoState)
             {
+                using var allocateRewardCtrlExecuteActivity = ActivitySource.StartActivity("AllocateRewardCtrl.Execute");
                 states = AllocateRewardCtrl.Execute(
                     states,
                     context,
                     nativeTokens,
                     context.LastCommit?.Votes,
-                    new ProposerInfo(proposerInfoState));
+                    new ProposerInfo(proposerInfoState),
+                    ActivitySource);
+                allocateRewardCtrlExecuteActivity?.Dispose();
             };
 
+            allocateRewardActivity?.Dispose();
             return states;
         }
     }

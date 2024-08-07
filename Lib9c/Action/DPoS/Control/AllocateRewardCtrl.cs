@@ -1,6 +1,7 @@
 #nullable enable
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics;
 using System.Linq;
 using System.Numerics;
 using Libplanet.Action;
@@ -39,7 +40,8 @@ namespace Nekoyume.Action.DPoS.Control
             IActionContext ctx,
             IImmutableSet<Currency>? nativeTokens,
             IEnumerable<Vote>? votes,
-            ProposerInfo proposerInfo)
+            ProposerInfo proposerInfo,
+            ActivitySource? activitySource = null)
         {
             if (nativeTokens is null)
             {
@@ -51,12 +53,16 @@ namespace Nekoyume.Action.DPoS.Control
                 if (votes is { } lastVotesEnumerable)
                 {
                     var lastVotes = lastVotesEnumerable.ToArray();
+                    using var distributeProposerRewardActivity = activitySource?.StartActivity("DistributeProposerReward" + nativeToken.Ticker);
                     states = DistributeProposerReward(
                         states, ctx, nativeToken, proposerInfo, lastVotes);
+                    distributeProposerRewardActivity?.Dispose();
 
                     // TODO: Check if this is correct?
+                    using var distributeValidatorRewardActivity = activitySource?.StartActivity("DistributeValidatorReward" + nativeToken.Ticker);
                     states = DistributeValidatorReward(
                         states, ctx, nativeToken, lastVotes);
+                    distributeValidatorRewardActivity?.Dispose();
                 }
 
                 FungibleAssetValue communityFund = states.GetBalance(
